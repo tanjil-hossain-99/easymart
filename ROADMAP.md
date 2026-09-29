@@ -15,80 +15,86 @@
 
 ---
 
-## Phase 0 — Foundation
+## Phase 0 — Foundation ✅
 > Set up the project skeleton. Nothing fancy, just things that must exist before anything else.
 
-- [ ] `git init` at root, push to GitHub
-- [ ] Create `.env` files for server (never commit these)
-- [ ] Install and start PostgreSQL locally (`brew install postgresql@17`)
-- [ ] Create `easymart` database in psql
-- [ ] Connect Express to Postgres using `pg` (node-postgres — no ORM yet)
-- [ ] Health check endpoint `GET /health` that queries the DB and returns status
-- [ ] Centralized error handler middleware in Express
-- [ ] Request logger middleware (log method, path, status, duration)
-- [ ] `server/db/` folder for all database logic
-- [ ] `server/db/migrate.ts` — a script that runs SQL files in order to create tables
-- [ ] `server/db/seed.ts` — a script to insert dummy data
+- [x] `git init` at root, push to GitHub
+- [x] Create `.env` files for server (never commit these)
+- [x] Install and start PostgreSQL locally (`brew install postgresql@17`)
+- [x] Create `easymart` database in psql
+- [x] Connect Express to Postgres using `pg` (node-postgres — no ORM yet)
+- [x] Health check endpoint `GET /health` that queries the DB and returns status
+- [x] Centralized error handler middleware in Express
+- [x] Request logger middleware (log method, path, status, duration)
+- [x] `server/db/` folder for all database logic
+- [x] `server/db/migrate.ts` — a script that runs SQL files in order to create tables
+- [x] `server/db/seed.ts` — a script to insert dummy data
 
 **Phase 0 done when:** `GET /health` returns `{ db: "ok" }` and you can see the log line in terminal.
 
 ---
 
-## Phase 1 — Schema Design
+## Phase 1 — Schema Design ✅
 > Design on paper first. Every mistake here costs you later.
 
-- [ ] Draw the full schema on paper before writing SQL
-- [ ] Write `CREATE TABLE` SQL for:
-  - `users` (id, email, password_hash, role, created_at)
+- [x] Draw the full schema on paper before writing SQL
+- [x] Write `CREATE TABLE` SQL for:
+  - `users` (id, email, password_hash, google_id, avatar_url, role, created_at)
   - `merchants` (id, name, url, details, logo_url, image_url)
   - `categories` (id, name, slug, parent_id)
-  - `products` (id, title, description, price, discount, merchant_id, category_id, created_at)
+  - `products` (id, title, description, price, discount, merchant_id, category_id, stripe_product_id, stripe_price_id, is_active, created_at)
   - `product_images` (id, product_id, url, is_primary)
-  - `product_variants` (id, product_id, type, value, stock, price_modifier)
-  - `inventory` (id, product_id, variant_id, quantity)
+  - `product_variants` (id, product_id, type, value, price_modifier)
+  - `inventory` (id, product_id, variant_id, quantity, version)
   - `carts` (id, user_id, created_at)
   - `cart_items` (id, cart_id, product_id, variant_id, quantity)
-  - `orders` (id, user_id, status, total_amount, stripe_payment_intent_id, created_at)
+  - `orders` (id, user_id, status, total_amount, stripe_payment_intent_id, idempotency_key, created_at)
   - `order_items` (id, order_id, product_id, variant_id, quantity, price_at_purchase)
   - `saved_products` (id, user_id, product_id)
-- [ ] Run migrations and verify tables exist in psql
+  - `payments` (id, order_id, stripe_payment_intent_id, amount, currency, status)
+  - `invoices` (id, order_id, file_path, created_at)
+- [x] Run migrations and verify tables exist in psql (`\dt` shows 14 tables)
+- [x] Added `CHECK (discount >= 0 AND discount <= 100)` constraint on products
 
-**Questions to answer in `NOTES.md` before moving on:**
-- Why does `order_items` store `price_at_purchase` instead of reading from `products`?
-- Why is `inventory` separate from `products`?
-- What is `parent_id` on `categories` for?
-
-**Phase 1 done when:** all tables exist, you can explain every column.
+**Key decisions understood:**
+- `price_at_purchase` on `order_items` — snapshot, not a reference
+- `inventory` is separate from `products` — supports per-variant stock
+- `parent_id` on `categories` — adjacency list for subcategory tree
+- `version` on `inventory` — reserved for optimistic locking in Phase 5
+- `idempotency_key` on `orders` — prevents duplicate orders
+- `NUMERIC` not `FLOAT` for all money columns
 
 ---
 
-## Phase 2 — Seed Data (50k products)
+## Phase 2 — Seed Data ✅
 > Inserting data is not trivial at scale. You'll learn why.
 
-- [ ] Write a seed script using `faker` that generates:
+- [x] Write a seed script using `@faker-js/faker` that generates:
   - 500 users
   - 20 merchants
-  - 50 categories (with subcategories)
-  - **50,000 products** with images, variants and inventory
-  - 5,000 past orders with order items
-- [ ] First attempt: insert row by row — measure how long it takes
-- [ ] Optimize: switch to batch inserts (multi-row `INSERT`) — measure again
-- [ ] Run `EXPLAIN ANALYZE` on `SELECT * FROM products` — observe the `Seq Scan`
-
-**Phase 2 done when:** 50k products in DB, seed finishes in under 30 seconds.
+  - 50 categories (10 top-level + 40 subcategories)
+  - **50,000 products** with images and inventory
+  - ~2,647 past orders with order items
+- [x] Used `insertMany` batch pattern — chunks of 1000 rows per query
+- [x] Seed completes in **2.1 seconds** for 50k products
+- [x] Verified counts: 50,000 products · 50,000 inventory rows · 2,647 orders
+- [x] Ran `EXPLAIN ANALYZE` — observed `Seq Scan` with no indexes
 
 ---
 
-## Phase 3 — Core Product APIs + Indexes
+## Phase 3 — Core Product APIs + Indexes 🔄 In Progress
 > Most of the backend learning starts here.
 
-- [ ] `GET /products` — list with filters (category, price range, discount), sorting, pagination
-- [ ] `GET /products/:id` — single product with variants and merchant info
-- [ ] `GET /categories` — full category tree
-- [ ] Add indexes — start with none, measure, add, measure again:
-  - Index on `products.category_id`
-  - Index on `products.price`
-  - Composite index on `(category_id, price)`
+- [x] `GET /products` — list with filters (category, price range, discount), sorting, pagination
+- [x] `GET /products/:id` — single product with variants, images, merchant and inventory
+- [x] `GET /categories` — full category list (flat, tree built on frontend)
+- [x] Added indexes and measured before/after with `EXPLAIN ANALYZE`:
+  - `idx_products_price` on `products(price)` → **10.9ms → 3.6ms**
+  - `idx_products_category` on `products(category_id)` → **~10ms → 0.38ms**
+  - `idx_products_category_price` composite on `(category_id, price)` → **0.71ms** for combined filter
+- [x] Understood `Seq Scan` vs `Bitmap Heap Scan` vs `Index Scan`
+- [x] Understood composite index column order — left-most column rule
+- [x] Built minimal frontend UI — product grid, filters, detail page (React Query)
 - [ ] Compare `OFFSET` pagination on page 1 vs page 4000 — measure the difference
 - [ ] Implement cursor-based (keyset) pagination — measure again
 - [ ] Fix the N+1 problem: product list should not fire one query per product
@@ -228,9 +234,9 @@
 - [ ] `GET /users/:id/orders` — purchase history
 
 **Frontend (minimal UI, just functional):**
+- [x] Product list page — grid with filters (category, price, sort, discount)
+- [x] Product detail page — images, variants, stock, merchant info
 - [ ] Homepage — featured products, categories
-- [ ] `/products` — filter page (category, price, sort)
-- [ ] `/products/:id` — product detail with variants
 - [ ] `/cart` — cart page
 - [ ] `/checkout` — order placement with Stripe Elements
 - [ ] `/orders/:id` — order status + invoice download
@@ -268,15 +274,15 @@
 
 | Phase | Topic | Status |
 |-------|-------|--------|
-| 0 | Foundation | 🔲 Not started |
-| 1 | Schema Design | 🔲 Not started |
-| 2 | Seed Data | 🔲 Not started |
-| 3 | Product APIs + Indexes | 🔲 Not started |
+| 0 | Foundation | ✅ Done |
+| 1 | Schema Design | ✅ Done |
+| 2 | Seed Data | ✅ Done |
+| 3 | Product APIs + Indexes | 🔄 In Progress |
 | 4 | Auth | 🔲 Not started |
 | 5 | Cart & Race Conditions | 🔲 Not started |
 | 6 | Stripe Payments | 🔲 Not started |
 | 7 | Redis Caching | 🔲 Not started |
-| 8 | Meilisearch | 🔲 Not started |
+| 8 | Algolia Search | 🔲 Not started |
 | 9 | Background Jobs | 🔲 Not started |
 | 10 | Invoice PDF | 🔲 Not started |
 | 11 | Admin + Frontend | 🔲 Not started |
