@@ -1,5 +1,6 @@
 import { Router, Request, Response } from "express"
 import pool from "../db/pool.js"
+import type { CategoryRow } from "../types.js"
 
 const router = Router()
 
@@ -7,7 +8,7 @@ const router = Router()
 // Returns all categories. Parent categories have parent_id = null.
 // The frontend can build the tree from this flat list.
 router.get("/", async (_req: Request, res: Response) => {
-  const result = await pool.query(`
+  const result = await pool.query<CategoryRow>(`
     SELECT id, name, slug, parent_id
     FROM categories
     ORDER BY parent_id NULLS FIRST, name

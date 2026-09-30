@@ -1,3 +1,4 @@
+import { AddToCartButton } from "@/components/AddToCartButton"
 import { useProduct } from "@/hooks/useProducts"
 
 type Props = { id: string; onBack: () => void }
@@ -91,6 +92,8 @@ export function ProductDetailPage({ id, onBack }: Props) {
               </span>
             </p>
           )}
+
+          <AddToCartButton productId={data.id} stock={baseStock} />
 
           {/* Debug: raw IDs — useful during development */}
           <details style={{ marginTop: 16 }}>

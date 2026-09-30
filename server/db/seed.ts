@@ -63,8 +63,8 @@ async function seedCategories(): Promise<string[]> {
   console.log("Seeding categories...")
 
   // First 10 are top-level (parent_id = null)
-  const topLevel = Array.from({ length: 10 }, () => {
-    const name = faker.commerce.department()
+  // department() has a small pool, so pick unique names to avoid slug collisions
+  const topLevel = faker.helpers.uniqueArray(faker.commerce.department, 10).map((name) => {
     return [name, faker.helpers.slugify(name).toLowerCase(), null]
   })
   const topIds = await batchInsert("categories", ["name", "slug", "parent_id"], topLevel)

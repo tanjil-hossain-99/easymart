@@ -5,7 +5,8 @@ export function logger(req: Request, res: Response, next: NextFunction) {
 
   res.on("finish", () => {
     const duration = Date.now() - start
-    console.log(`${req.method} ${req.path} → ${res.statusCode} (${duration}ms)`)
+    // originalUrl, not path: inside a mounted router req.path is relative ("/items" instead of "/cart/items")
+    console.log(`${req.method} ${req.originalUrl} → ${res.statusCode} (${duration}ms)`)
   })
 
   next()

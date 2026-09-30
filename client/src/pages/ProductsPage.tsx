@@ -1,16 +1,21 @@
 import { useState } from "react"
 import { useCategories, useProducts } from "@/hooks/useProducts"
-import type { ProductFilters } from "@/lib/api"
+import { PAGINATION, PRODUCT_SORT_LABELS, ProductSort } from "@/lib/constants"
+import type { ProductFilters } from "@/types/api"
 
 type Props = { onSelect: (id: string) => void }
 
 export function ProductsPage({ onSelect }: Props) {
-  const [filters, setFilters] = useState<ProductFilters>({ page: 1, limit: 20, sort: "newest" })
+  const [filters, setFilters] = useState<ProductFilters>({
+    page: PAGINATION.defaultPage,
+    limit: PAGINATION.defaultLimit,
+    sort: ProductSort.Newest,
+  })
   const { data, isPending, isError } = useProducts(filters)
   const { data: categories } = useCategories()
 
   function set(patch: Partial<ProductFilters>) {
-    setFilters((f) => ({ ...f, ...patch, page: 1 }))
+    setFilters((f) => ({ ...f, ...patch, page: PAGINATION.defaultPage }))
   }
 
   return (
@@ -41,10 +46,10 @@ export function ProductsPage({ onSelect }: Props) {
           onBlur={(e) => set({ max_price: e.target.value || undefined })}
         />
 
-        <select onChange={(e) => set({ sort: e.target.value as ProductFilters["sort"] })}>
-          <option value="newest">Newest</option>
-          <option value="price_asc">Price ↑</option>
-          <option value="price_desc">Price ↓</option>
+        <select onChange={(e) => set({ sort: e.target.value as ProductSort })}>
+          {Object.values(ProductSort).map((sort) => (
+            <option key={sort} value={sort}>{PRODUCT_SORT_LABELS[sort]}</option>
+          ))}
         </select>
 
         <label style={{ display: "flex", alignItems: "center", gap: 4 }}>
@@ -86,15 +91,15 @@ export function ProductsPage({ onSelect }: Props) {
       {data && (
         <div style={{ marginTop: 16, display: "flex", gap: 8, alignItems: "center" }}>
           <button
-            disabled={filters.page === 1}
-            onClick={() => setFilters((f) => ({ ...f, page: (f.page ?? 1) - 1 }))}
+            disabled={filters.page === PAGINATION.defaultPage}
+            onClick={() => setFilters((f) => ({ ...f, page: (f.page ?? PAGINATION.defaultPage) - 1 }))}
           >
             ← Prev
           </button>
           <span>Page {data.pagination.page} of {data.pagination.totalPages}</span>
           <button
             disabled={data.pagination.page >= data.pagination.totalPages}
-            onClick={() => setFilters((f) => ({ ...f, page: (f.page ?? 1) + 1 }))}
+            onClick={() => setFilters((f) => ({ ...f, page: (f.page ?? PAGINATION.defaultPage) + 1 }))}
           >
             Next →
           </button>

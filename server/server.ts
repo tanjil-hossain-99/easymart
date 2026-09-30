@@ -1,40 +1,54 @@
-import cors from "cors"
-import "dotenv/config"
-import express, { Request, Response } from "express"
-import pool from "./db/pool.js"
-import { errorHandler } from "./middleware/errorHandler.js"
-import { logger } from "./middleware/logger.js"
-import productsRouter from "./routes/products.js"
-import categoriesRouter from "./routes/categories.js"
+import cors from "cors";
+import express, { Request, Response } from "express";
+import { env } from "./config/env.js";
+import { HttpStatus } from "./constants.js";
+import pool from "./db/pool.js";
+import { errorHandler } from "./middleware/errorHandler.js";
+import { logger } from "./middleware/logger.js";
+import adminRouter from "./routes/admin.js";
+import authRouter from "./routes/auth.js";
+import cartRouter from "./routes/cart.js";
+import categoriesRouter from "./routes/categories.js";
+import checkoutRouter from "./routes/checkout.js";
+import ordersRouter from "./routes/orders.js";
+import productsRouter from "./routes/products.js";
+import webhooksRouter from "./routes/webhooks.js";
 
-const app = express()
-const PORT = process.env.PORT || 3000
+const app = express();
 
 // Middleware
-app.use(cors())
-app.use(express.json())
-app.use(logger)
+app.use(cors());
+app.use(logger);
+// Webhooks need the raw request body for signature checks, so they're mounted
+// BEFORE express.json() — otherwise the body would already be parsed.
+app.use("/webhooks", webhooksRouter);
+app.use(express.json());
 
 // Routes
 app.get("/", (_req: Request, res: Response) => {
-  res.json({ message: "EasyMart API" })
-})
+  res.json({ message: "EasyMart API" });
+});
 
 app.get("/health", async (_req: Request, res: Response) => {
   try {
-    const result = await pool.query("SELECT NOW() as time")
-    res.json({ db: "ok", time: result.rows[0].time })
+    const result = await pool.query("SELECT NOW() as time");
+    res.json({ db: "ok", time: result.rows[0].time });
   } catch (err) {
-    res.status(500).json({ db: "error" })
+    res.status(HttpStatus.InternalServerError).json({ db: "error" });
   }
-})
+});
 
-app.use("/products", productsRouter)
-app.use("/categories", categoriesRouter)
+app.use("/products", productsRouter);
+app.use("/categories", categoriesRouter);
+app.use("/auth", authRouter);
+app.use("/admin", adminRouter);
+app.use("/cart", cartRouter);
+app.use("/checkout", checkoutRouter);
+app.use("/orders", ordersRouter);
 
 // Error handler — must be last
-app.use(errorHandler)
+app.use(errorHandler);
 
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`)
-})
+app.listen(env.port, () => {
+  console.log(`🚀 Server running on port ${env.port}`);
+});

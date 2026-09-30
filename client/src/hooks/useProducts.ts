@@ -1,32 +1,27 @@
 import { useQuery } from "@tanstack/react-query"
-import {
-  apiFetch,
-  buildProductsUrl,
-  type Category,
-  type ProductDetail,
-  type ProductFilters,
-  type ProductsResponse,
-} from "@/lib/api"
+import { apiFetch, buildProductsUrl } from "@/lib/api"
+import { API_ENDPOINTS, QUERY_KEYS, STALE_TIME } from "@/lib/constants"
+import type { Category, ProductDetail, ProductFilters, ProductsResponse } from "@/types/api"
 
 export function useProducts(filters: ProductFilters) {
   return useQuery<ProductsResponse>({
-    queryKey: ["products", filters],
+    queryKey: [QUERY_KEYS.products, filters],
     queryFn: () => apiFetch(buildProductsUrl(filters)),
   })
 }
 
 export function useProduct(id: string) {
   return useQuery<ProductDetail>({
-    queryKey: ["product", id],
-    queryFn: () => apiFetch(`/products/${id}`),
+    queryKey: [QUERY_KEYS.product, id],
+    queryFn: () => apiFetch(API_ENDPOINTS.product(id)),
     enabled: !!id,
   })
 }
 
 export function useCategories() {
   return useQuery<Category[]>({
-    queryKey: ["categories"],
-    queryFn: () => apiFetch("/categories"),
-    staleTime: 5 * 60 * 1000, // categories rarely change — cache for 5 mins
+    queryKey: [QUERY_KEYS.categories],
+    queryFn: () => apiFetch(API_ENDPOINTS.categories),
+    staleTime: STALE_TIME.categories,
   })
 }

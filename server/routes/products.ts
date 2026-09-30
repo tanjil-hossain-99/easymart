@@ -1,5 +1,14 @@
 import { Router, Request, Response } from "express"
+import { HttpStatus, PAGINATION, ProductSort } from "../constants.js"
 import pool from "../db/pool.js"
+import type {
+  CountRow,
+  InventoryRow,
+  ProductDetailRow,
+  ProductImageRow,
+  ProductListRow,
+  ProductVariantRow,
+} from "../types.js"
 
 const router = Router()
 
@@ -18,9 +27,9 @@ router.get("/", async (req: Request, res: Response) => {
     min_price,
     max_price,
     has_discount,
-    sort = "newest",
-    page = "1",
-    limit = "20",
+    sort = ProductSort.Newest,
+    page = String(PAGINATION.defaultPage),
+    limit = String(PAGINATION.defaultLimit),
   } = req.query as Record<string, string>
 
   // Build WHERE clauses dynamically
@@ -49,17 +58,19 @@ router.get("/", async (req: Request, res: Response) => {
   }
 
   // Sort
-  const sortMap: Record<string, string> = {
-    price_asc:  "p.price ASC",
-    price_desc: "p.price DESC",
-    newest:     "p.created_at DESC",
+  // Record<ProductSort, …> makes TypeScript error if a sort option is added without SQL for it
+  const sortMap: Record<ProductSort, string> = {
+    [ProductSort.PriceAsc]:  "p.price ASC",
+    [ProductSort.PriceDesc]: "p.price DESC",
+    [ProductSort.Newest]:    "p.created_at DESC",
   }
-  const orderBy = sortMap[sort] ?? "p.created_at DESC"
+  const orderBy = sortMap[sort as ProductSort] ?? sortMap[ProductSort.Newest]
 
   // Pagination — OFFSET based (intentionally naive for now)
   // In Phase 3 we will observe how slow this gets on large offsets
-  const pageNum  = Math.max(1, parseInt(page))
-  const limitNum = Math.min(100, Math.max(1, parseInt(limit)))
+  // `|| default` also covers NaN from garbage input like ?page=abc
+  const pageNum  = Math.max(1, parseInt(page) || PAGINATION.defaultPage)
+  const limitNum = Math.min(PAGINATION.maxLimit, Math.max(1, parseInt(limit) || PAGINATION.defaultLimit))
   const offset   = (pageNum - 1) * limitNum
 
   const where = conditions.join(" AND ")
@@ -91,8 +102,8 @@ router.get("/", async (req: Request, res: Response) => {
   `
 
   const [products, countResult] = await Promise.all([
-    pool.query(sql, values),
-    pool.query(countSql, values),
+    pool.query<ProductListRow>(sql, values),
+    pool.query<CountRow>(countSql, values),
   ])
 
   const total = parseInt(countResult.rows[0].total)
@@ -120,7 +131,7 @@ router.get("/:id", async (req: Request, res: Response) => {
   // All 4 queries run in parallel — no reason to wait for one before starting the next
   const [productResult, imagesResult, variantsResult, inventoryResult] =
     await Promise.all([
-      pool.query(
+      pool.query<ProductDetailRow>(
         `SELECT
           p.*,
           m.name   AS merchant_name,
@@ -134,22 +145,22 @@ router.get("/:id", async (req: Request, res: Response) => {
         WHERE p.id = $1 AND p.is_active = true`,
         [id]
       ),
-      pool.query(
+      pool.query<ProductImageRow>(
         `SELECT id, url, is_primary FROM product_images WHERE product_id = $1 ORDER BY is_primary DESC`,
         [id]
       ),
-      pool.query(
+      pool.query<ProductVariantRow>(
         `SELECT id, type, value, price_modifier FROM product_variants WHERE product_id = $1`,
         [id]
       ),
-      pool.query(
+      pool.query<InventoryRow>(
         `SELECT variant_id, quantity FROM inventory WHERE product_id = $1`,
         [id]
       ),
     ])
 
   if (productResult.rows.length === 0) {
-    res.status(404).json({ error: "Product not found" })
+    res.status(HttpStatus.NotFound).json({ error: "Product not found" })
     return
   }
 
