@@ -9,7 +9,7 @@ export function RequireAuth() {
   const location = useLocation()
 
   if (!user) {
-    return <Navigate to={ROUTES.login} replace state={{ from: location.pathname }} />
+    return <Navigate to={ROUTES.login} replace state={{ from: location.pathname + location.search }} />
   }
   return <Outlet />
 }

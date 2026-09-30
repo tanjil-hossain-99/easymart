@@ -12,6 +12,7 @@ import categoriesRouter from "./routes/categories.js";
 import checkoutRouter from "./routes/checkout.js";
 import ordersRouter from "./routes/orders.js";
 import productsRouter from "./routes/products.js";
+import searchRouter from "./routes/search.js";
 import webhooksRouter from "./routes/webhooks.js";
 
 const app = express();
@@ -40,6 +41,7 @@ app.get("/health", async (_req: Request, res: Response) => {
 
 app.use("/products", productsRouter);
 app.use("/categories", categoriesRouter);
+app.use("/search", searchRouter);
 app.use("/auth", authRouter);
 app.use("/admin", adminRouter);
 app.use("/cart", cartRouter);

@@ -1,12 +1,46 @@
-import { useQuery } from "@tanstack/react-query"
-import { apiFetch, buildProductsUrl } from "@/lib/api"
-import { API_ENDPOINTS, QUERY_KEYS, STALE_TIME } from "@/lib/constants"
-import type { Category, ProductDetail, ProductFilters, ProductsResponse } from "@/types/api"
+import { keepPreviousData, useQuery } from "@tanstack/react-query"
+import { apiFetch, buildUrl } from "@/lib/api"
+import { API_ENDPOINTS, QUERY_KEYS, SEARCH, STALE_TIME } from "@/lib/constants"
+import type {
+  Category,
+  ProductDetail,
+  ProductFilters,
+  ProductsResponse,
+  SearchFilters,
+  SearchSuggestions,
+} from "@/types/api"
 
-export function useProducts(filters: ProductFilters) {
+type QueryToggle = { enabled?: boolean }
+
+export function useProducts(filters: ProductFilters, { enabled = true }: QueryToggle = {}) {
   return useQuery<ProductsResponse>({
     queryKey: [QUERY_KEYS.products, filters],
-    queryFn: () => apiFetch(buildProductsUrl(filters)),
+    queryFn: () => apiFetch(buildUrl(API_ENDPOINTS.products, filters)),
+    enabled,
+  })
+}
+
+// Full-text search via our server → Algolia
+export function useSearchProducts(filters: SearchFilters, { enabled = true }: QueryToggle = {}) {
+  return useQuery<ProductsResponse>({
+    queryKey: [QUERY_KEYS.search, filters],
+    queryFn: () => apiFetch(buildUrl(API_ENDPOINTS.search, filters)),
+    enabled,
+    // While the next query loads, keep showing the previous results
+    // instead of flashing "Loading…" on every search
+    placeholderData: keepPreviousData,
+  })
+}
+
+// Autocomplete for the header search box
+export function useSearchSuggestions(q: string, categoryId?: string) {
+  return useQuery<SearchSuggestions>({
+    queryKey: [QUERY_KEYS.suggestions, q, categoryId],
+    queryFn: () =>
+      apiFetch(buildUrl(API_ENDPOINTS.searchSuggestions, { q, category_id: categoryId })),
+    enabled: q.length >= SEARCH.minSuggestionLength,
+    staleTime: STALE_TIME.suggestions,
+    placeholderData: keepPreviousData, // keep the dropdown steady while the next letter loads
   })
 }
 

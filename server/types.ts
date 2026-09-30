@@ -26,8 +26,10 @@ export type ProductListRow = {
   title: string;
   price: string;
   discount: string;
+  final_price: string; // price after discount
   category_id: string;
   merchant_id: string;
+  merchant_name: string;
   created_at: Date;
   primary_image: string | null;
 };
@@ -100,6 +102,14 @@ export type OrderRow = {
   created_at: Date;
 };
 
+export type OrderSummaryRow = {
+  id: string;
+  status: OrderStatus;
+  total_amount: string;
+  created_at: Date;
+  item_count: number; // total units across all items
+};
+
 export type OrderItemDetailRow = {
   id: string;
   product_id: string;
@@ -114,6 +124,36 @@ export type OrderTotalRow = {
   id: string;
   total_amount: string;
   amount_minor: number; // total in cents, for Stripe
+};
+
+// ── Search ────────────────────────────────────────────────────────────────────
+
+// One product as stored in Algolia. Prices are numbers here (not strings like
+// in Postgres) because Algolia can only do numeric filters (price >= 10) on numbers.
+export type ProductSearchRecord = {
+  objectID: string; // Algolia's primary key — we use the product id
+  title: string;
+  description: string;
+  price: number;
+  discount: number;
+  final_price: number; // price after discount — what filters and the UI use
+  category_id: string;
+  category_ids: string[]; // own category + its parent department, for department filters
+  category_name: string;
+  merchant_id: string;
+  merchant_name: string;
+  primary_image: string | null;
+  created_at: string;
+  created_at_ts: number; // unix seconds — Algolia can rank/sort by numbers, not date strings
+};
+
+export type ProductSuggestion = Pick<ProductSearchRecord, "title" | "primary_image"> & {
+  id: string;
+};
+
+export type SearchSuggestionsResponse = {
+  queries: string[]; // completions of the typed text, e.g. "granite chicken"
+  products: ProductSuggestion[];
 };
 
 // ── Request bodies ────────────────────────────────────────────────────────────

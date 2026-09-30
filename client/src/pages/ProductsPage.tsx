@@ -1,110 +1,70 @@
-import { useState } from "react"
-import { useCategories, useProducts } from "@/hooks/useProducts"
-import { PAGINATION, PRODUCT_SORT_LABELS, ProductSort } from "@/lib/constants"
-import type { ProductFilters } from "@/types/api"
+import { FilterSidebar } from "@/components/catalog/FilterSidebar"
+import { Pagination } from "@/components/catalog/Pagination"
+import { ProductResultCard } from "@/components/catalog/ProductResultCard"
+import { ResultsBar } from "@/components/catalog/ResultsBar"
+import { useCatalogParams } from "@/hooks/useCatalogParams"
+import { useProducts, useSearchProducts } from "@/hooks/useProducts"
+import { PAGINATION } from "@/lib/constants"
 
-type Props = { onSelect: (id: string) => void }
+// Amazon-style results page:
+//   [ results count ........................ sort ]
+//   [ filters ] [ result rows ...                  ]
+//               [ ‹ Previous 1 2 3 … Next ›        ]
+export function ProductsPage() {
+  // Filters live in the URL (set by the header search, category links and the sidebar)
+  const { filters, update } = useCatalogParams()
+  const { q, sort, ...rest } = filters
+  const isSearching = !!q
 
-export function ProductsPage({ onSelect }: Props) {
-  const [filters, setFilters] = useState<ProductFilters>({
-    page: PAGINATION.defaultPage,
-    limit: PAGINATION.defaultLimit,
-    sort: ProductSort.Newest,
-  })
-  const { data, isPending, isError } = useProducts(filters)
-  const { data: categories } = useCategories()
+  // Two data sources, same response shape: a query → Algolia search, no query → Postgres list.
+  // `enabled` makes sure only the active one actually sends requests.
+  const productList = useProducts({ ...rest, sort }, { enabled: !isSearching })
+  const searchResults = useSearchProducts({ ...rest, q: q ?? "" }, { enabled: isSearching })
+  const { data, isPending, isError } = isSearching ? searchResults : productList
 
-  function set(patch: Partial<ProductFilters>) {
-    setFilters((f) => ({ ...f, ...patch, page: PAGINATION.defaultPage }))
+  function goToPage(page: number) {
+    update({ page })
+    window.scrollTo({ top: 0 }) // new page → start reading from the top, like Amazon
   }
 
   return (
-    <div style={{ padding: 24 }}>
-      <h1>Products ({data?.pagination.total ?? "…"})</h1>
+    <div>
+      <ResultsBar
+        query={q}
+        pagination={data?.pagination}
+        sort={sort}
+        onSortChange={(sort) => update({ sort })}
+      />
 
-      {/* ── Filters ── */}
-      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
-        <select onChange={(e) => set({ category_id: e.target.value || undefined })}>
-          <option value="">All categories</option>
-          {categories?.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.parent_id ? "  └ " : ""}{c.name}
-            </option>
-          ))}
-        </select>
+      <div className="flex gap-6 p-4">
+        <FilterSidebar filters={filters} onChange={update} />
 
-        <input
-          type="number"
-          placeholder="Min price"
-          style={{ width: 90 }}
-          onBlur={(e) => set({ min_price: e.target.value || undefined })}
-        />
-        <input
-          type="number"
-          placeholder="Max price"
-          style={{ width: 90 }}
-          onBlur={(e) => set({ max_price: e.target.value || undefined })}
-        />
+        <main className="flex min-w-0 flex-1 flex-col gap-3">
+          <h2 className="text-xl font-bold">Results</h2>
 
-        <select onChange={(e) => set({ sort: e.target.value as ProductSort })}>
-          {Object.values(ProductSort).map((sort) => (
-            <option key={sort} value={sort}>{PRODUCT_SORT_LABELS[sort]}</option>
-          ))}
-        </select>
-
-        <label style={{ display: "flex", alignItems: "center", gap: 4 }}>
-          <input
-            type="checkbox"
-            onChange={(e) => set({ has_discount: e.target.checked || undefined })}
-          />
-          On sale
-        </label>
-      </div>
-
-      {/* ── States ── */}
-      {isPending && <p>Loading…</p>}
-      {isError && <p style={{ color: "red" }}>Failed to load products.</p>}
-
-      {/* ── Grid ── */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 12 }}>
-        {data?.data.map((p) => (
-          <div
-            key={p.id}
-            onClick={() => onSelect(p.id)}
-            style={{ border: "1px solid #ddd", borderRadius: 6, padding: 12, cursor: "pointer" }}
-          >
-            {p.primary_image && (
-              <img src={p.primary_image} alt={p.title} style={{ width: "100%", height: 120, objectFit: "cover", borderRadius: 4 }} />
-            )}
-            <p style={{ fontWeight: 600, margin: "8px 0 4px", fontSize: 14 }}>{p.title}</p>
-            <p style={{ margin: 0 }}>
-              ${p.price}
-              {Number(p.discount) > 0 && (
-                <span style={{ color: "green", marginLeft: 6 }}>-{p.discount}%</span>
-              )}
+          {isPending && <p className="text-muted-foreground">Loading…</p>}
+          {isError && <p className="text-destructive">Failed to load products.</p>}
+          {data?.data.length === 0 && (
+            <p className="text-muted-foreground">
+              No products match. Try different keywords or clear some filters.
             </p>
-          </div>
-        ))}
-      </div>
+          )}
 
-      {/* ── Pagination ── */}
-      {data && (
-        <div style={{ marginTop: 16, display: "flex", gap: 8, alignItems: "center" }}>
-          <button
-            disabled={filters.page === PAGINATION.defaultPage}
-            onClick={() => setFilters((f) => ({ ...f, page: (f.page ?? PAGINATION.defaultPage) - 1 }))}
-          >
-            ← Prev
-          </button>
-          <span>Page {data.pagination.page} of {data.pagination.totalPages}</span>
-          <button
-            disabled={data.pagination.page >= data.pagination.totalPages}
-            onClick={() => setFilters((f) => ({ ...f, page: (f.page ?? PAGINATION.defaultPage) + 1 }))}
-          >
-            Next →
-          </button>
-        </div>
-      )}
+          {data?.data.map((product) => (
+            <ProductResultCard key={product.id} product={product} />
+          ))}
+
+          {data && (
+            <div className="mt-4">
+              <Pagination
+                page={filters.page ?? PAGINATION.defaultPage}
+                totalPages={data.pagination.totalPages}
+                onPageChange={goToPage}
+              />
+            </div>
+          )}
+        </main>
+      </div>
     </div>
   )
 }

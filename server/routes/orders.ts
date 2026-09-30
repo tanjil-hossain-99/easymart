@@ -3,11 +3,30 @@ import { stripe } from "../config/stripe.js";
 import { HttpStatus, OrderStatus } from "../constants.js";
 import pool from "../db/pool.js";
 import { requireAuth } from "../middleware/auth.js";
-import type { OrderItemDetailRow, OrderRow } from "../types.js";
+import type { OrderItemDetailRow, OrderRow, OrderSummaryRow } from "../types.js";
 
 const router = Router();
 
 router.use(requireAuth);
+
+// ─── GET /orders ──────────────────────────────────────────────────────────────
+// The logged-in user's orders, newest first. Summary only — the detail page
+// loads items via GET /orders/:id.
+router.get("/", async (req: Request, res: Response) => {
+  // One query with GROUP BY instead of "fetch orders, then count items per order"
+  // (that would be N+1 queries: 1 for the list + 1 per order).
+  const result = await pool.query<OrderSummaryRow>(
+    `SELECT o.id, o.status, o.total_amount, o.created_at,
+            COALESCE(SUM(oi.quantity), 0)::INTEGER AS item_count
+     FROM orders o
+     LEFT JOIN order_items oi ON oi.order_id = o.id
+     WHERE o.user_id = $1
+     GROUP BY o.id
+     ORDER BY o.created_at DESC`,
+    [req.user!.id],
+  );
+  res.json(result.rows);
+});
 
 // ─── GET /orders/:id ──────────────────────────────────────────────────────────
 // One order with its items. While the order is still pending, also returns the

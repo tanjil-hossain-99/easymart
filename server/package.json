@@ -8,7 +8,8 @@
     "start": "tsx server.ts",
     "server": "nodemon --exec tsx server.ts",
     "build": "tsc",
-    "stripe:listen": "stripe listen --events payment_intent.succeeded,payment_intent.payment_failed --forward-to localhost:3000/webhooks/stripe"
+    "stripe:listen": "stripe listen --events payment_intent.succeeded,payment_intent.payment_failed --forward-to localhost:3000/webhooks/stripe",
+    "algolia:sync": "tsx db/algolia-sync.ts"
   },
   "keywords": [],
   "author": "",
@@ -16,6 +17,7 @@
   "type": "module",
   "dependencies": {
     "@faker-js/faker": "^10.6.0",
+    "algoliasearch": "^5.59.0",
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.6",
     "dotenv": "^18.0.4",

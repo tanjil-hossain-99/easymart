@@ -1,7 +1,7 @@
 import { env } from "@/config/env"
-import { API_ENDPOINTS, HttpMethod, HttpStatus } from "@/lib/constants"
+import { HttpMethod, HttpStatus } from "@/lib/constants"
 import { useAuthStore } from "@/stores/useAuthStore"
-import type { ApiErrorBody, ProductFilters } from "@/types/api"
+import type { ApiErrorBody } from "@/types/api"
 
 // Carries the HTTP status so callers can tell "wrong password" (401) from "server down" (500)
 export class ApiError extends Error {
@@ -45,11 +45,16 @@ export async function apiFetch<T>(path: string, options: FetchOptions = {}): Pro
   return res.json() as Promise<T>
 }
 
-// Turns a filters object into "/products?category_id=…&sort=…", skipping empty values
-export function buildProductsUrl(filters: ProductFilters): string {
-  const params = new URLSearchParams()
-  for (const [key, value] of Object.entries(filters)) {
-    if (value !== undefined && value !== "" && value !== false) params.set(key, String(value))
+type QueryParams = Record<string, string | number | boolean | undefined>
+
+// Turns (path, filters) into "/products?category_id=…&sort=…", skipping empty values.
+// Shared by /products and /search since they take the same filters.
+export function buildUrl(path: string, params: QueryParams): string {
+  const search = new URLSearchParams()
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== "" && value !== false) search.set(key, String(value))
   }
-  return `${API_ENDPOINTS.products}?${params.toString()}`
+  const query = search.toString()
+  // No params → "/s", not "/s?"
+  return query ? `${path}?${query}` : path
 }

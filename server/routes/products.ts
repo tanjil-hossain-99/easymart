@@ -1,6 +1,7 @@
 import { Router, Request, Response } from "express"
 import { HttpStatus, PAGINATION, ProductSort } from "../constants.js"
 import pool from "../db/pool.js"
+import { FINAL_PRICE_SQL, inCategoryTreeSql } from "../db/sql.js"
 import type {
   CountRow,
   InventoryRow,
@@ -40,17 +41,19 @@ router.get("/", async (req: Request, res: Response) => {
 
   if (category_id) {
     values.push(category_id)
-    conditions.push(`p.category_id = $${values.length}`)
+    conditions.push(inCategoryTreeSql(`$${values.length}`))
   }
 
+  // Price filters and sort use the price after discount — the price the customer sees.
+  // (Trade-off: idx_products_price can't serve an expression; an expression index could.)
   if (min_price) {
     values.push(Number(min_price))
-    conditions.push(`p.price >= $${values.length}`)
+    conditions.push(`${FINAL_PRICE_SQL} >= $${values.length}`)
   }
 
   if (max_price) {
     values.push(Number(max_price))
-    conditions.push(`p.price <= $${values.length}`)
+    conditions.push(`${FINAL_PRICE_SQL} <= $${values.length}`)
   }
 
   if (has_discount === "true") {
@@ -60,9 +63,10 @@ router.get("/", async (req: Request, res: Response) => {
   // Sort
   // Record<ProductSort, …> makes TypeScript error if a sort option is added without SQL for it
   const sortMap: Record<ProductSort, string> = {
-    [ProductSort.PriceAsc]:  "p.price ASC",
-    [ProductSort.PriceDesc]: "p.price DESC",
+    [ProductSort.PriceAsc]:  `${FINAL_PRICE_SQL} ASC`,
+    [ProductSort.PriceDesc]: `${FINAL_PRICE_SQL} DESC`,
     [ProductSort.Newest]:    "p.created_at DESC",
+    [ProductSort.DiscountDesc]: "p.discount DESC",
   }
   const orderBy = sortMap[sort as ProductSort] ?? sortMap[ProductSort.Newest]
 
@@ -82,11 +86,14 @@ router.get("/", async (req: Request, res: Response) => {
       p.title,
       p.price,
       p.discount,
+      ${FINAL_PRICE_SQL} AS final_price,
       p.category_id,
       p.merchant_id,
+      m.name AS merchant_name,
       p.created_at,
       pi.url AS primary_image
     FROM products p
+    JOIN merchants m ON m.id = p.merchant_id
     LEFT JOIN product_images pi
       ON pi.product_id = p.id AND pi.is_primary = true
     WHERE ${where}
@@ -134,6 +141,7 @@ router.get("/:id", async (req: Request, res: Response) => {
       pool.query<ProductDetailRow>(
         `SELECT
           p.*,
+          ${FINAL_PRICE_SQL} AS final_price,
           m.name   AS merchant_name,
           m.url    AS merchant_url,
           m.logo_url AS merchant_logo,

@@ -46,6 +46,7 @@ export const ProductSort = {
   Newest: "newest",
   PriceAsc: "price_asc",
   PriceDesc: "price_desc",
+  DiscountDesc: "discount_desc", // "Today's deals": biggest discount first
 } as const;
 export type ProductSort = (typeof ProductSort)[keyof typeof ProductSort];
 
@@ -80,6 +81,24 @@ export type StripeEvent = (typeof StripeEvent)[keyof typeof StripeEvent];
 export const STRIPE = {
   signatureHeader: "stripe-signature",
 } as const;
+
+export const ALGOLIA = {
+  productsIndex: "products",
+  // Free plan record limit — we index the newest N active products. Raise on a paid plan.
+  maxRecords: 10_000,
+  batchSize: 1_000, // records per upload request
+  descriptionMaxLength: 500, // keep records small (Algolia bills/limits by record size too)
+  defaultHitsPerPage: 20,
+  maxHitsPerPage: 100,
+  // Autocomplete
+  minSuggestionQueryLength: 2, // "a" matches almost everything — not useful, wastes quota
+  suggestionHits: 20, // products scanned to build query suggestions
+  maxQuerySuggestions: 6,
+  maxProductSuggestions: 4,
+} as const;
+
+// Used to validate ids before putting them in an Algolia filter string
+export const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export const PAYMENT = {
   currency: "usd", // must match the payments.currency default

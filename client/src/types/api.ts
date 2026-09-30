@@ -31,10 +31,12 @@ export type ApiErrorBody = {
 export type Product = {
   id: string
   title: string
-  price: string
-  discount: string
+  price: string // list price (before discount)
+  discount: string // percentage, e.g. "42.99"
+  final_price: string // price after discount, calculated by the server
   category_id: string
   merchant_id: string
+  merchant_name: string
   created_at: string
   primary_image: string | null
 }
@@ -88,6 +90,27 @@ export type ProductFilters = {
   limit?: number
 }
 
+export type ProductSuggestion = {
+  id: string
+  title: string
+  primary_image: string | null
+}
+
+export type SearchSuggestions = {
+  queries: string[]
+  products: ProductSuggestion[]
+}
+
+// Everything the catalog page can be filtered by (lives in the URL)
+export type CatalogFilters = ProductFilters & {
+  q?: string
+}
+
+// Search uses the same filters, minus sort (Algolia orders by relevance), plus the text query
+export type SearchFilters = Omit<ProductFilters, "sort"> & {
+  q: string
+}
+
 // ── Cart ───────────────────────────────────────────────────────────────────
 
 export type CartItem = {
@@ -138,6 +161,14 @@ export type OrderItem = {
   quantity: number
   price_at_purchase: string
   line_total: string // price_at_purchase × quantity, calculated by the server
+}
+
+export type OrderSummary = {
+  id: string
+  status: OrderStatus
+  total_amount: string
+  created_at: string
+  item_count: number
 }
 
 export type Order = {

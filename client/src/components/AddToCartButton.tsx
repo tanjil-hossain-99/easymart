@@ -1,42 +1,45 @@
-import { Link, useLocation, useNavigate } from "react-router"
+import { Link } from "react-router"
 import { Button } from "@/components/ui/button"
 import { useAddToCart } from "@/hooks/useCart"
+import { useRequireLogin } from "@/hooks/useRequireLogin"
 import { CART, ROUTES } from "@/lib/constants"
-import { useAuthStore } from "@/stores/useAuthStore"
 
 type Props = {
   productId: string
-  stock: number
+  // Unknown on search results (Algolia records don't carry live stock) — the server
+  // re-checks stock at checkout anyway, so the button stays enabled
+  stock?: number
+  compact?: boolean // smaller variant for result cards
 }
 
-export function AddToCartButton({ productId, stock }: Props) {
-  const user = useAuthStore((s) => s.user)
+export function AddToCartButton({ productId, stock, compact = false }: Props) {
   const addToCart = useAddToCart()
-  const navigate = useNavigate()
-  const location = useLocation()
+  const requireLogin = useRequireLogin()
 
   function handleClick() {
-    // Guests can browse, but the cart lives on the server under a user — log in first,
-    // then come straight back to this product
-    if (!user) {
-      navigate(ROUTES.login, { state: { from: location.pathname } })
-      return
-    }
+    // Guests can browse, but the cart lives on the server under a user
+    if (!requireLogin()) return
     addToCart.mutate({ product_id: productId, quantity: CART.defaultAddQuantity })
   }
 
-  const outOfStock = stock <= 0
+  const outOfStock = stock !== undefined && stock <= 0
 
   return (
-    <div className="my-4 flex items-center gap-3">
-      <Button size="lg" onClick={handleClick} disabled={outOfStock || addToCart.isPending}>
+    <div className={`flex items-center gap-3 ${compact ? "" : "my-4"}`}>
+      <Button
+        size={compact ? "sm" : "lg"}
+        onClick={handleClick}
+        disabled={outOfStock || addToCart.isPending}
+        // Amazon-style yellow pill button
+        className="rounded-full bg-brand px-4 text-brand-foreground hover:bg-brand-hover"
+      >
         {outOfStock ? "Out of stock" : addToCart.isPending ? "Adding…" : "Add to cart"}
       </Button>
 
       {addToCart.isSuccess && (
         <span className="text-sm">
           Added ✓{" "}
-          <Link to={ROUTES.cart} className="text-primary underline">
+          <Link to={ROUTES.cart} className="text-brand-text underline">
             View cart
           </Link>
         </span>

@@ -18,4 +18,7 @@ export const env = {
   jwtSecret: required("JWT_SECRET"),
   stripeSecretKey: required("STRIPE_SECRET_KEY"),
   stripeWebhookSecret: required("STRIPE_WEBHOOK_SECRET"),
+  algoliaAppId: required("ALGOLIA_APP_ID"),
+  algoliaSearchKey: required("ALGOLIA_SEARCH_KEY"), // read-only: used by GET /search
+  algoliaAdminKey: required("ALGOLIA_ADMIN_KEY"), // can write/delete: only used for indexing
 } as const;

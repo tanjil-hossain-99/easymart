@@ -23,8 +23,11 @@ export function OrderPage() {
 
   // The webhook removed the bought items from the cart on the server —
   // refetch so the header's cart count updates
+  // Same for the order list, so it shows this order as paid
   useEffect(() => {
-    if (isPaid) queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.cart] })
+    if (!isPaid) return
+    queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.cart] })
+    queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.orders] })
   }, [isPaid])
 
   if (isPending) return <p className="p-6">Loading…</p>
@@ -76,9 +79,14 @@ export function OrderPage() {
         Total: <strong>{formatPrice(order.total_amount)}</strong>
       </p>
 
-      <Link to={ROUTES.home} className="mt-6 inline-block text-primary underline">
-        Continue shopping
-      </Link>
+      <div className="mt-6 flex gap-4">
+        <Link to={ROUTES.orders} className="text-primary underline">
+          All orders
+        </Link>
+        <Link to={ROUTES.home} className="text-primary underline">
+          Continue shopping
+        </Link>
+      </div>
     </div>
   )
 }
