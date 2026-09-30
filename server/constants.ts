@@ -54,6 +54,14 @@ export const CART = {
   defaultAddQuantity: 1,
 } as const;
 
+// category_attributes.type values — decides how an attribute is filtered and displayed
+export const AttributeType = {
+  Enum: "enum", // pick from a list: display_type = OLED / QLED / LED
+  Number: "number", // filtered by ranges: screen_size 44–52.9 in
+  Boolean: "boolean", // a single checkbox: noise_cancelling
+} as const;
+export type AttributeType = (typeof AttributeType)[keyof typeof AttributeType];
+
 // Must match the CHECK constraint on orders.status. Keep in sync with the client.
 export const OrderStatus = {
   Pending: "pending", // created, waiting for payment
@@ -93,8 +101,20 @@ export const ALGOLIA = {
   // Autocomplete
   minSuggestionQueryLength: 2, // "a" matches almost everything — not useful, wastes quota
   suggestionHits: 20, // products scanned to build query suggestions
-  maxQuerySuggestions: 6,
-  maxProductSuggestions: 4,
+  maxSuggestions: 10, // rows in the dropdown, like Amazon
+  // Dynamic filters: a category's filters are shown only if it holds at least this share
+  // of the results ("tv" → 95% Televisions → TV filters; "black" → mixed → no type filters)
+  dominantCategoryMinShare: 0.5,
+  attributeFacetPrefix: "attributes.", // attributes are nested in records: attributes.screen_size
+} as const;
+
+// URL/API params for the dynamic filters. Keep in sync with client/src/lib/constants.ts
+//   ?brand=LG&brand=Sony                 → brand is LG OR Sony
+//   ?a.display_type=OLED&a.screen_size=45-56 → attributes (a. prefix), number ranges as "min-max"
+export const FACET_PARAM = {
+  brand: "brand",
+  attributePrefix: "a.",
+  rangeSeparator: "-", // "45-56", "-33" (up to 33), "70-" (70 and above)
 } as const;
 
 // Used to validate ids before putting them in an Algolia filter string

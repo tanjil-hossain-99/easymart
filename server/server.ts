@@ -48,6 +48,12 @@ app.use("/cart", cartRouter);
 app.use("/checkout", checkoutRouter);
 app.use("/orders", ordersRouter);
 
+// No route matched → JSON 404 in the same { error } shape as every other API error
+// (instead of Express's default HTML "Cannot GET /xyz" page)
+app.use((req: Request, res: Response) => {
+  res.status(HttpStatus.NotFound).json({ error: `Not found: ${req.method} ${req.originalUrl}` });
+});
+
 // Error handler — must be last
 app.use(errorHandler);
 

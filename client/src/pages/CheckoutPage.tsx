@@ -3,15 +3,19 @@ import { Elements, PaymentElement, useElements, useStripe } from "@stripe/react-
 import { Navigate, useParams } from "react-router"
 import { Button } from "@/components/ui/button"
 import { useOrder } from "@/hooks/useOrders"
+import { isNotFoundError } from "@/lib/api"
 import { orderUrl } from "@/lib/constants"
 import { formatPrice } from "@/lib/format"
 import { stripePromise } from "@/lib/stripe"
+import { NotFoundPage } from "@/pages/NotFoundPage"
 
 export function CheckoutPage() {
   const { orderId } = useParams()
   const { data: order, isPending, isError, error } = useOrder(orderId!)
 
   if (isPending) return <p className="p-6">Loading…</p>
+  // Someone else's order, or an id that doesn't exist → same not-found screen
+  if (isError && isNotFoundError(error)) return <NotFoundPage thing="order" />
   if (isError) return <p className="p-6 text-destructive">{error.message}</p>
 
   // No client secret = nothing left to pay (already paid or cancelled) → show the order

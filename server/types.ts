@@ -1,4 +1,4 @@
-import type { OrderStatus, UserRole } from "./constants.js";
+import type { AttributeType, OrderStatus, UserRole } from "./constants.js";
 
 // ── Database rows ─────────────────────────────────────────────────────────────
 // Used as pool.query<Row>() generics so result.rows is typed instead of `any`.
@@ -142,18 +142,45 @@ export type ProductSearchRecord = {
   category_name: string;
   merchant_id: string;
   merchant_name: string;
+  brand: string | null;
+  // Type-specific filter values, e.g. { screen_size: 65, display_type: "OLED" }.
+  // Faceted as "attributes.<key>" in Algolia.
+  attributes: Record<string, string | number | boolean>;
   primary_image: string | null;
   created_at: string;
   created_at_ts: number; // unix seconds — Algolia can rank/sort by numbers, not date strings
 };
 
-export type ProductSuggestion = Pick<ProductSearchRecord, "title" | "primary_image"> & {
-  id: string;
+// ── Dynamic filters (facets) ──────────────────────────────────────────────────
+
+export type FacetOption = {
+  value: string; // what goes in the URL: "LG", "true", or a range "45-56"
+  label: string; // what the sidebar shows: "LG", "44.9 to 55.9 in"…
+  count: number; // how many results have it (ignoring this group's own selection)
+  selected: boolean;
+};
+
+export type FacetGroup = {
+  param: string; // URL param: "brand" or "a.screen_size"
+  label: string; // "Brand", "Screen Size"
+  type: AttributeType;
+  options: FacetOption[];
+};
+
+export type SearchFacets = {
+  categoryId: string | null; // the dominant category whose filters are shown (null = mixed results)
+  groups: FacetGroup[];
+};
+
+// One dropdown row. Always a search query (clicking it searches, like Amazon);
+// the image is only a visual hint taken from a product that matches it.
+export type QuerySuggestion = {
+  text: string;
+  image: string | null;
 };
 
 export type SearchSuggestionsResponse = {
-  queries: string[]; // completions of the typed text, e.g. "granite chicken"
-  products: ProductSuggestion[];
+  suggestions: QuerySuggestion[];
 };
 
 // ── Request bodies ────────────────────────────────────────────────────────────

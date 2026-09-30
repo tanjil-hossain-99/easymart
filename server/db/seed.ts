@@ -1,15 +1,41 @@
 import "dotenv/config"
+import { readFileSync } from "fs"
+import { dirname, join } from "path"
+import { fileURLToPath } from "url"
+import bcrypt from "bcryptjs"
 import { faker } from "@faker-js/faker"
+import { AUTH, AttributeType, OrderStatus, UserRole } from "../constants.js"
+import { CATALOG } from "./catalog/catalog.js"
+import { generateProduct } from "./catalog/generate.js"
+import type { ProductTypeDef } from "./catalog/types.js"
 import pool from "./pool.js"
+import { FINAL_PRICE_SQL } from "./sql.js"
 
 // ─── Config ────────────────────────────────────────────────────────────────
 const COUNT = {
   merchants: 20,
-  categories: 50,
   users: 500,
-  products: 50_000,
-  ordersPerUser: 10,   // ~5000 total orders
+  products: 50_000, // spread evenly across the catalog's product types
+  ordersPerUser: 10,
 }
+
+const IMAGES_PER_PRODUCT = { min: 1, max: 3 }
+const INVENTORY = { max: 500, outOfStockChance: 0.05 }
+
+// Known logins for manual testing (the 500 random users can't log in — no real hashes)
+const TEST_PASSWORD = "password123"
+const TEST_ACCOUNTS = [
+  { email: "test@example.com", role: UserRole.Admin },
+  { email: "customer@example.com", role: UserRole.User },
+]
+
+// Real product photos per product type, fetched once by `yarn catalog:images`
+const IMAGES_FILE = join(dirname(fileURLToPath(import.meta.url)), "catalog", "images.json")
+const PRODUCT_IMAGES: Record<string, string[]> = JSON.parse(readFileSync(IMAGES_FILE, "utf-8"))
+
+// Product types without real photos get a labelled tile instead of an unrelated photo
+const placeholderImage = (label: string) =>
+  `https://placehold.co/600x600/f3f4f6/6b7280/png?text=${encodeURIComponent(label)}`
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -45,6 +71,8 @@ async function batchInsert(
   return ids
 }
 
+const slugify = (name: string) => faker.helpers.slugify(name).toLowerCase()
+
 // ─── Seed functions ─────────────────────────────────────────────────────────
 
 async function seedMerchants(): Promise<string[]> {
@@ -59,78 +87,121 @@ async function seedMerchants(): Promise<string[]> {
   return batchInsert("merchants", ["name", "url", "details", "logo_url", "image_url"], rows)
 }
 
-async function seedCategories(): Promise<string[]> {
-  console.log("Seeding categories...")
+// Departments → product types (subcategories) → each type's filter definitions.
+// Returns product type name → category id.
+async function seedCatalogCategories(): Promise<Map<string, string>> {
+  console.log("Seeding categories and their filter attributes...")
+  const categoryIdByType = new Map<string, string>()
 
-  // First 10 are top-level (parent_id = null)
-  // department() has a small pool, so pick unique names to avoid slug collisions
-  const topLevel = faker.helpers.uniqueArray(faker.commerce.department, 10).map((name) => {
-    return [name, faker.helpers.slugify(name).toLowerCase(), null]
-  })
-  const topIds = await batchInsert("categories", ["name", "slug", "parent_id"], topLevel)
+  for (const department of CATALOG) {
+    const [departmentId] = await batchInsert(
+      "categories",
+      ["name", "slug", "parent_id"],
+      [[department.name, slugify(department.name), null]]
+    )
 
-  // Remaining 40 are subcategories, each under a random top-level
-  const subLevel = Array.from({ length: COUNT.categories - 10 }, () => {
-    const name = `${faker.commerce.productAdjective()} ${faker.commerce.department()}`
-    return [name, faker.helpers.slugify(name).toLowerCase() + "-" + faker.string.nanoid(4), faker.helpers.arrayElement(topIds)]
-  })
-  const subIds = await batchInsert("categories", ["name", "slug", "parent_id"], subLevel)
+    for (const type of department.productTypes) {
+      const [categoryId] = await batchInsert(
+        "categories",
+        ["name", "slug", "parent_id"],
+        [[type.name, slugify(type.name), departmentId]]
+      )
+      categoryIdByType.set(type.name, categoryId)
 
-  return [...topIds, ...subIds]
+      const attributeRows = type.attributes.map((def, position) => [
+        categoryId,
+        def.key,
+        def.label,
+        def.type,
+        def.type === AttributeType.Number ? def.unit : null,
+        def.type === AttributeType.Number ? JSON.stringify(def.buckets) : null,
+        position,
+      ])
+      await batchInsert(
+        "category_attributes",
+        ["category_id", "key", "label", "type", "unit", "buckets", "position"],
+        attributeRows
+      )
+    }
+  }
+  return categoryIdByType
 }
 
 async function seedUsers(): Promise<string[]> {
   console.log("Seeding users...")
-  const rows = Array.from({ length: COUNT.users }, () => [
-    faker.internet.email(),
-    faker.internet.password(), // plain text for seed only — real auth uses bcrypt
-    "user",
+  const passwordHash = await bcrypt.hash(TEST_PASSWORD, AUTH.bcryptRounds)
+  const testRows = TEST_ACCOUNTS.map((a) => [a.email, passwordHash, a.role, null])
+
+  const randomRows = Array.from({ length: COUNT.users }, () => [
+    faker.internet.email().toLowerCase(),
+    faker.internet.password(), // not a bcrypt hash — these users can't log in, they only own orders
+    UserRole.User,
     faker.image.avatar(),
   ])
-  return batchInsert("users", ["email", "password_hash", "role", "avatar_url"], rows)
+  return batchInsert("users", ["email", "password_hash", "role", "avatar_url"], [...testRows, ...randomRows])
 }
 
-async function seedProducts(merchantIds: string[], categoryIds: string[]): Promise<string[]> {
-  console.log("Seeding products (50k — this takes a moment)...")
-  const rows = Array.from({ length: COUNT.products }, () => [
-    faker.commerce.productName(),
-    faker.commerce.productDescription(),
-    faker.commerce.price({ min: 5, max: 2000 }),
-    faker.number.float({ min: 0, max: 70, fractionDigits: 2 }),
-    faker.helpers.arrayElement(merchantIds),
-    faker.helpers.arrayElement(categoryIds),
-    true,
-  ])
-  return batchInsert(
+type SeededProduct = { id: string; type: ProductTypeDef }
+
+async function seedProducts(
+  merchantIds: string[],
+  categoryIdByType: Map<string, string>
+): Promise<SeededProduct[]> {
+  const types = CATALOG.flatMap((d) => d.productTypes)
+  const perType = Math.ceil(COUNT.products / types.length)
+  console.log(`Seeding products (${perType} × ${types.length} product types)...`)
+
+  const rows: unknown[][] = []
+  const productTypes: ProductTypeDef[] = [] // same order as rows, to pair with returned ids
+
+  for (const type of types) {
+    for (let i = 0; i < perType; i++) {
+      const p = generateProduct(type)
+      rows.push([
+        p.title,
+        p.description,
+        p.price,
+        p.discount,
+        faker.helpers.arrayElement(merchantIds),
+        categoryIdByType.get(type.name),
+        true,
+        p.brand,
+        JSON.stringify(p.attributes),
+      ])
+      productTypes.push(type)
+    }
+  }
+
+  const ids = await batchInsert(
     "products",
-    ["title", "description", "price", "discount", "merchant_id", "category_id", "is_active"],
+    ["title", "description", "price", "discount", "merchant_id", "category_id", "is_active", "brand", "attributes"],
     rows
   )
+  return ids.map((id, i) => ({ id, type: productTypes[i] }))
 }
 
-async function seedProductImages(productIds: string[]): Promise<void> {
+async function seedProductImages(products: SeededProduct[]): Promise<void> {
   console.log("Seeding product images...")
 
-  // 1–3 images per product
   const rows: unknown[][] = []
-  for (const productId of productIds) {
-    const count = faker.number.int({ min: 1, max: 3 })
-    for (let i = 0; i < count; i++) {
-      rows.push([productId, faker.image.url(), i === 0]) // first image is primary
-    }
+  for (const { id, type } of products) {
+    const pool = PRODUCT_IMAGES[type.name]
+    const urls = pool?.length
+      ? faker.helpers.arrayElements(pool, IMAGES_PER_PRODUCT) // distinct real photos
+      : [placeholderImage(type.name)]
+    urls.forEach((url, i) => rows.push([id, url, i === 0])) // first image is primary
   }
   await batchInsert("product_images", ["product_id", "url", "is_primary"], rows)
 }
 
-async function seedInventory(productIds: string[]): Promise<void> {
+async function seedInventory(products: SeededProduct[]): Promise<void> {
   console.log("Seeding inventory...")
 
-  // One inventory row per product (no variants for now — kept simple for Phase 2)
-  const rows = productIds.map((id) => [
+  const rows = products.map(({ id }) => [
     id,
-    null,                                          // variant_id: null = no variant
-    faker.number.int({ min: 0, max: 500 }),        // quantity
-    0,                                             // version (for optimistic locking in Phase 5)
+    null, // variant_id: null = stock for the product itself (variants come later)
+    faker.datatype.boolean(INVENTORY.outOfStockChance) ? 0 : faker.number.int({ min: 1, max: INVENTORY.max }),
+    0, // version (for optimistic locking in Phase 5)
   ])
   await batchInsert("inventory", ["product_id", "variant_id", "quantity", "version"], rows)
 }
@@ -138,43 +209,25 @@ async function seedInventory(productIds: string[]): Promise<void> {
 async function seedOrders(userIds: string[], productIds: string[]): Promise<void> {
   console.log("Seeding orders...")
 
-  // Pick a small sample of users to have orders (not all 500)
-  const activeUsers = faker.helpers.arrayElements(userIds, 500)
+  const orderStatuses = [OrderStatus.Paid, OrderStatus.Shipped, OrderStatus.Cancelled]
 
-  for (const userId of activeUsers) {
+  for (const userId of userIds) {
     const orderCount = faker.number.int({ min: 1, max: COUNT.ordersPerUser })
-    const orderRows: unknown[][] = []
+    const orderRows = Array.from({ length: orderCount }, () => [
+      userId,
+      faker.helpers.arrayElement(orderStatuses),
+      0, // real total is calculated from the items below
+    ])
+    const orderIds = await batchInsert("orders", ["user_id", "status", "total_amount"], orderRows, 500)
 
-    for (let i = 0; i < orderCount; i++) {
-      orderRows.push([
-        userId,
-        faker.helpers.arrayElement(["paid", "shipped", "cancelled"]),
-        faker.commerce.price({ min: 10, max: 5000 }),
-      ])
-    }
-
-    const orderIds = await batchInsert(
-      "orders",
-      ["user_id", "status", "total_amount"],
-      orderRows,
-      500
-    )
-
-    // 1–4 items per order
+    // 1–4 items per order; prices are filled in from the products afterwards
     const itemRows: unknown[][] = []
     for (const orderId of orderIds) {
       const itemCount = faker.number.int({ min: 1, max: 4 })
       for (let j = 0; j < itemCount; j++) {
-        itemRows.push([
-          orderId,
-          faker.helpers.arrayElement(productIds),
-          null,
-          faker.number.int({ min: 1, max: 5 }),
-          faker.commerce.price({ min: 5, max: 500 }),
-        ])
+        itemRows.push([orderId, faker.helpers.arrayElement(productIds), null, faker.number.int({ min: 1, max: 5 }), 0])
       }
     }
-
     await batchInsert(
       "order_items",
       ["order_id", "product_id", "variant_id", "quantity", "price_at_purchase"],
@@ -182,6 +235,19 @@ async function seedOrders(userIds: string[], productIds: string[]): Promise<void
       500
     )
   }
+
+  // Prices and totals in SQL, with the same formula the app uses — so seeded orders
+  // are consistent with what checkout would have produced
+  console.log("  pricing order items and totals...")
+  await pool.query(`
+    UPDATE order_items oi SET price_at_purchase = ${FINAL_PRICE_SQL}
+    FROM products p WHERE p.id = oi.product_id
+  `)
+  await pool.query(`
+    UPDATE orders o SET total_amount = t.total
+    FROM (SELECT order_id, SUM(price_at_purchase * quantity) AS total FROM order_items GROUP BY order_id) t
+    WHERE t.order_id = o.id
+  `)
 }
 
 // ─── Main ───────────────────────────────────────────────────────────────────
@@ -194,23 +260,24 @@ async function seed() {
     // Clear in reverse order (respect foreign keys)
     console.log("Clearing existing data...")
     await pool.query(`
-      TRUNCATE order_items, orders, inventory, product_images,
-               saved_products, cart_items, carts, products,
-               categories, merchants, users
+      TRUNCATE payments, invoices, order_items, orders, inventory, product_images,
+               product_variants, saved_products, cart_items, carts, products,
+               category_attributes, categories, merchants, users
       RESTART IDENTITY CASCADE
     `)
 
     const merchantIds = await seedMerchants()
-    const categoryIds = await seedCategories()
-    const userIds     = await seedUsers()
-    const productIds  = await seedProducts(merchantIds, categoryIds)
+    const categoryIdByType = await seedCatalogCategories()
+    const userIds = await seedUsers()
+    const products = await seedProducts(merchantIds, categoryIdByType)
 
-    await seedProductImages(productIds)
-    await seedInventory(productIds)
-    await seedOrders(userIds, productIds)
+    await seedProductImages(products)
+    await seedInventory(products)
+    await seedOrders(userIds, products.map((p) => p.id))
 
     const elapsed = ((Date.now() - start) / 1000).toFixed(1)
     console.log(`\n✅ Seed complete in ${elapsed}s`)
+    console.log(`   Test logins (password "${TEST_PASSWORD}"): ${TEST_ACCOUNTS.map((a) => `${a.email} (${a.role})`).join(", ")}`)
   } catch (err) {
     console.error("\n❌ Seed failed:", (err as Error).message)
     process.exit(1)

@@ -13,6 +13,11 @@
 - After each phase, write a short note in `NOTES.md` on what broke and what fixed it
 - Don't move to the next phase until the current one is solid
 
+> **Build-order change (Sep 30, 2026):** the performance/learning work in Phase 3 is paused.
+> We built the **full customer flow first** (auth → cart → Stripe checkout → orders → Algolia search)
+> in a simple, un-optimized form, plus an Amazon-style storefront. The naive spots are listed in
+> **Known naive spots** below — they are exactly what Phases 5–7 and 12 are for.
+
 ---
 
 ## Phase 0 — Foundation ✅
@@ -79,10 +84,12 @@
 - [x] Seed completes in **2.1 seconds** for 50k products
 - [x] Verified counts: 50,000 products · 50,000 inventory rows · 2,647 orders
 - [x] Ran `EXPLAIN ANALYZE` — observed `Seq Scan` with no indexes
+- [x] Replaced Faker names with a **realistic catalog** — see *Realistic Catalog* below
+      (numbers above are from the original Faker seed)
 
 ---
 
-## Phase 3 — Core Product APIs + Indexes 🔄 In Progress
+## Phase 3 — Core Product APIs + Indexes ⏸️ Paused (APIs done, perf exercises pending)
 > Most of the backend learning starts here.
 
 - [x] `GET /products` — list with filters (category, price range, discount), sorting, pagination
@@ -95,23 +102,37 @@
 - [x] Understood `Seq Scan` vs `Bitmap Heap Scan` vs `Index Scan`
 - [x] Understood composite index column order — left-most column rule
 - [x] Built minimal frontend UI — product grid, filters, detail page (React Query)
+- [x] Indexes moved into a migration (`015_product_indexes.sql`) — they were created by hand
+      in psql, so a fresh machine didn't have them
+- [x] Price filters/sort use the **price after discount** (`FINAL_PRICE_SQL`); department filter
+      includes subcategories — *trade-off: `idx_products_price` can't serve an expression → try an
+      expression index here*
+- [x] Measured OFFSET baseline (before indexes on `created_at`, 50k rows):
+      page 1 ≈ **60 ms** (Seq Scan + top-N heapsort) · `OFFSET 49980` ≈ **74 ms**
+      (Seq Scan + external merge sort, 3.2 MB spilled to disk). Note: 50k rows = 2,500 pages, "page 4000" doesn't exist
+- [ ] Add `(created_at, id)` index, re-measure page 1 vs last page
 - [ ] Compare `OFFSET` pagination on page 1 vs page 4000 — measure the difference
 - [ ] Implement cursor-based (keyset) pagination — measure again
 - [ ] Fix the N+1 problem: product list should not fire one query per product
+      *(list already uses a JOIN for the primary image — the real issue found: `product_images.product_id`
+      and other foreign keys have **no index**; Postgres doesn't index FKs automatically)*
 
 **Phase 3 done when:** product list with filters runs under 50ms, you can read an `EXPLAIN` output.
 
 ---
 
-## Phase 4 — Auth (Sessions vs JWT)
+## Phase 4 — Auth (Sessions vs JWT) 🔄 Basic version done
 > Understand the trade-offs before picking one.
 
 - [ ] Research: sessions vs JWT — write your conclusion in `NOTES.md`
-- [ ] `POST /auth/register` — hash password with `bcrypt`, store hash (never plain text)
-- [ ] `POST /auth/login` — verify password, issue JWT (access token + refresh token)
+- [x] `POST /auth/register` — hash password with `bcryptjs` (cost 10), store hash; role never taken from the request
+- [x] `POST /auth/login` — verify password, issue JWT *(access token only, 7-day expiry — no refresh token yet)*
+- [x] `GET /auth/me` — current user
 - [ ] `POST /auth/refresh` — exchange refresh token for new access token
-- [ ] `POST /auth/logout`
-- [ ] Auth middleware — protect routes that require login
+- [ ] `POST /auth/logout` *(today logout only drops the token in the browser)*
+- [x] Auth middleware — `requireAuth` (401) + `requireAdmin` (403); `/admin/*` protected as a whole
+- [x] First admin via script: `npx tsx db/make-admin.ts <email>`
+- [ ] Fix: role lives inside the JWT → a demoted admin keeps admin rights until the token expires
 - [ ] Rate limit `/auth/login` — max 5 attempts per IP per minute (implement manually first, then library)
 - [ ] Google OAuth (`passport.js` or `arctic` library)
 
@@ -119,17 +140,19 @@
 
 ---
 
-## Phase 5 — Cart & Checkout (Race Conditions) ⭐
+## Phase 5 — Cart & Checkout (Race Conditions) ⭐ 🔄 Cart + naive checkout done
 > This is the most important backend phase. Take the most time here.
 
-- [ ] `GET /cart` — fetch current user's cart
-- [ ] `POST /cart/items` — add item to cart
-- [ ] `PATCH /cart/items/:id` — update quantity
-- [ ] `DELETE /cart/items/:id` — remove item
+- [x] `GET /cart` — fetch current user's cart (prices calculated live, subtotal in SQL)
+- [x] `POST /cart/items` — add item to cart (atomic upsert: adding again increases quantity)
+- [x] `PATCH /cart/items/:id` — update quantity (ownership check in SQL → no IDOR)
+- [x] `DELETE /cart/items/:id` — remove item
+- [x] Migration 016: `UNIQUE NULLS NOT DISTINCT` on cart_items — NULL variant_id made the old constraint useless
 
 **Checkout — do this in stages:**
 
-- [ ] Stage 1 (naive): check stock → create order → decrement stock. No transaction.
+- [x] Stage 1 (naive): `POST /checkout` checks stock → creates order + items in a transaction →
+      stock is decremented later by the Stripe webhook. **No locking** — concurrent buyers can oversell.
 - [ ] Break it: write a script firing 200 concurrent checkout requests for a product with stock=10
 - [ ] Observe: how many orders were created? What is final stock?
 - [ ] Stage 2: wrap in a `BEGIN` / `COMMIT` transaction — does it fix it?
@@ -138,20 +161,27 @@
 - [ ] Stage 5: optimistic locking with a `version` column — implement and test
 - [ ] Compare all three approaches in `NOTES.md` (trade-offs, performance)
 - [ ] Add idempotency key to checkout — same request twice must not create two orders
+      *(today: every Checkout click creates a new pending order; only the Stripe call has an idempotency key)*
 - [ ] Handle deadlocks: what happens when two users buy products A+B in opposite order?
 
 **Phase 5 done when:** 200 concurrent buyers of 10-unit stock = exactly 10 orders, 0 stock, every time.
 
 ---
 
-## Phase 6 — Payments (Stripe)
+## Phase 6 — Payments (Stripe) 🔄 Happy path done
 > Real payment flows are more complex than a tutorial shows.
 
-- [ ] Create Stripe account, get test API keys
-- [ ] `POST /payments/create-intent` — create a Stripe PaymentIntent, return `client_secret`
-- [ ] Handle Stripe webhooks `POST /webhooks/stripe`:
-  - `payment_intent.succeeded` → mark order as paid, confirm stock deduction
-  - `payment_intent.payment_failed` → cancel order, release stock
+- [x] Create Stripe account, get test API keys (sandbox "EasyMart sandbox")
+- [x] `POST /checkout` creates the PaymentIntent (amount in cents, `metadata.order_id`,
+      idempotency key `order-<id>`) and returns `client_secret`; `GET /orders/:id` re-fetches it after a refresh
+- [x] Frontend: Stripe Payment Element on `/checkout/:orderId`, confirmation page polls until paid
+- [x] Handle Stripe webhooks `POST /webhooks/stripe` (raw body + signature check, mounted before `express.json()`):
+  - [x] `payment_intent.succeeded` → order `paid`, payment `succeeded`, stock decremented, bought items
+        removed from cart — one transaction, **idempotent** (`WHERE status = 'pending'`)
+  - [x] `payment_intent.payment_failed` → payment row `failed`; order stays `pending` so the customer can
+        retry with another card *(differs from the plan: nothing to release yet, stock isn't reserved)*
+- [x] Local webhooks: `yarn stripe:listen` (Stripe CLI; re-run `stripe login` when the token expires)
+- [ ] Decide: keep PaymentIntents or move to Checkout Sessions (Stripe's current recommendation)
 - [ ] Stock reservation: hold stock for 10 minutes during checkout, release if unpaid
 - [ ] Write a cleanup job (plain `setInterval` first) to release expired reservations
 - [ ] Model order as a state machine: `pending → paid → shipped / cancelled`
@@ -180,15 +210,19 @@
 
 ---
 
-## Phase 8 — Search (Algolia)
+## Phase 8 — Search (Algolia) 🔄 Search + autocomplete done
 > Full-text search is a separate concern from your database.
 
-- [ ] Create an Algolia account (free tier: 10k records, 10k searches/month — enough for dev)
-- [ ] Create a `products` index in the Algolia dashboard
-- [ ] Write a one-time script to push all 50k products to Algolia
-- [ ] `GET /search?q=...` — search endpoint that queries Algolia and returns results
+- [x] Create an Algolia account (free tier: 10k records, 10k searches/month — enough for dev)
+- [x] `products` index created and configured by the sync script (searchable attributes, ranking)
+- [x] `yarn algolia:sync` — clears the index, then pushes a **fair share per category** (≈434 × 23 = 10k);
+      "newest 10k" had left whole product types out of search
+- [x] `GET /search?q=...` — same filters + response shape as `/products`; read-only search key, admin key only for indexing
+- [x] `GET /search/suggestions` — Amazon-style autocomplete built from product names (no search analytics yet)
 - [ ] Sync: when a product is created/updated in Postgres, push the update to Algolia too
-- [ ] Add filters on search: category, price range, discount (Algolia facets)
+- [x] Add filters on search: category (incl. subcategories), price range on final price, discount *(as filters)*
+- [x] Real **facets** with counts + dynamic per-category filters — see *Realistic Catalog* steps 3–4
+- [ ] Price sorting inside search (needs Algolia replica indexes)
 - [ ] Understand why `ILIKE '%keyword%'` in Postgres doesn't scale for full-text search
 - [ ] Understand: Algolia is a separate service — what happens if Algolia is down but your DB is up?
 
@@ -223,7 +257,7 @@
 
 ---
 
-## Phase 11 — Admin & Remaining Pages
+## Phase 11 — Admin & Remaining Pages 🔄 Customer pages done, admin not started
 > Only after backend is solid, wire up the frontend.
 
 **Backend:**
@@ -231,16 +265,17 @@
 - [ ] `PUT /products/:id` — update product (admin only)
 - [ ] `DELETE /products/:id` — soft delete
 - [ ] `GET /admin/users` — list users with search
-- [ ] `GET /users/:id/orders` — purchase history
+- [x] Purchase history — built as `GET /orders` (own orders) + `GET /orders/:id` (with ownership check)
 
 **Frontend (minimal UI, just functional):**
-- [x] Product list page — grid with filters (category, price, sort, discount)
-- [x] Product detail page — images, variants, stock, merchant info
-- [ ] Homepage — featured products, categories
-- [ ] `/cart` — cart page
-- [ ] `/checkout` — order placement with Stripe Elements
-- [ ] `/orders/:id` — order status + invoice download
-- [ ] `/orders` — purchase history
+- [x] Product list page — now the Amazon-style results page `/s` (see *Storefront UX*)
+- [x] Product detail page — gallery, price box, buy box with quantity + Buy Now, breadcrumb
+- [x] Homepage — hero, today's deals, departments, new arrivals
+- [x] `/cart` — cart page
+- [x] `/checkout` — order placement with Stripe Elements
+- [x] `/orders/:id` — order status *(invoice download pending Phase 10)*
+- [x] `/orders` — purchase history
+- [x] `/login`, `/register` — with redirect back to where you were
 - [ ] `/saved` — saved/wishlist products
 - [ ] `/admin/products` — UPSERT product form
 - [ ] `/admin/users` — user search
@@ -270,6 +305,75 @@
 
 ---
 
+## Storefront UX (Amazon-style) ✅
+> Not in the original plan — added so the customer flow feels like a real store.
+
+- [x] Header: dark top bar, department dropdown + search box, account, returns & orders, cart icon with count *in* the basket
+- [x] Category bar: All · Today's Deals · departments
+- [x] Autocomplete dropdown: every row is a search (never jumps to a product), thumbnails as hints,
+      typed text plain / completion bold, ↑ ↓ Enter Esc, ARIA combobox
+- [x] Page dims while the search box is focused (overlay stays while using the department dropdown)
+- [x] Search state lives in the URL (`/s?q=…&category_id=…`) — shareable, back button works
+- [x] Results page: "1-20 of N results for …", sidebar (department drill-down, price ranges + min/max, discounts),
+      list-style result cards with -% badge + list price, numbered pagination
+- [x] Homepage and results page are separate (`/` vs `/s`), like amazon.com vs amazon.com/s
+- [x] Product page redesign (gallery, info, buy box)
+- [x] Not-found handling: catch-all `*` route, friendly page for missing products/orders (404 or malformed id),
+      no retries on 4xx, JSON 404 for unknown API paths *(deploy note: static hosts need an SPA rewrite to `index.html`)*
+
+---
+
+## Realistic Catalog + Dynamic Filters 🔄 Steps 1, 3, 4 done — variants (2) pending
+> Amazon's sidebar changes per product type (TVs → screen size; T-shirts → fit, sleeve).
+
+- [x] **Step 1 — Realistic catalog**
+  - Migration 018: `products.brand`, `products.attributes JSONB`, `category_attributes` (filter definitions per category)
+  - `server/db/catalog/`: 7 departments → 23 product types, real brands/models, attributes, price ranges,
+    title templates, per-brand rules (`brandValues`)
+  - Real product photos from DummyJSON (`yarn catalog:images` → `images.json`), labelled placeholder otherwise
+  - `yarn seed` rebuilds everything in ~5 s; test logins `test@example.com` (admin), `customer@example.com` — password `password123`
+- [ ] **Step 2 — Variants**: sizes for clothing/shoes, colors for some electronics, stock per variant,
+      picker on the product page, required in cart, shown on orders
+- [x] **Step 3 — Facets**: `brand` + `attributes.*` indexed and faceted in Algolia; `/search` returns counts
+  - Dominant category (≥ 50% of results) decides which filters appear; mixed results → only Brand
+  - **Disjunctive faceting** via Algolia multi-search: one extra counts-only query per active group,
+    so ticking LG keeps other brands' counts (OR within a group, AND across groups)
+  - Number attributes filtered by ranges (`a.screen_size=56-70`, Algolia `x:min TO max`), counts summed per bucket
+  - Filter values from the URL are validated/escaped before going into the Algolia filter string
+- [x] **Step 4 — Dynamic sidebar**: groups rendered from the response (checkbox lists with counts, "See more",
+      yes/no attributes under "Features"); selections live in the URL (`?brand=LG&a.display_type=OLED`)
+  - Results page uses Algolia when there's a query, a category or a filter; plain browsing stays on Postgres (keeps sorting)
+  - *Known limits: search-engine mode is relevance-only (sorting needs replicas); Algolia holds ~434 products per type (free plan)*
+
+---
+
+## Project Setup & Conventions (added along the way)
+
+- **Env config** validated at startup (`server/config/env.ts`, `client/src/config/env.ts`); `.env.example` in both apps
+- **No hard-coded values**: `as const` enums + derived types in `server/constants.ts` and `client/src/lib/constants.ts`
+  (TS `enum` isn't allowed — `erasableSyntaxOnly`); typed DB rows via `pool.query<Row>()`
+- **Frontend stack**: `fetch` wrapper (`apiFetch`) + TanStack Query for server state + Zustand for auth; react-router v7
+- **Scripts (server)**: `yarn migrate`, `yarn seed`, `yarn algolia:sync`, `yarn catalog:images`, `yarn stripe:listen`,
+  `npx tsx db/make-admin.ts <email>`
+- **New machine setup**: create the `easymart` DB → copy `.env.example` to `.env` → `yarn migrate` → `yarn seed` → `yarn algolia:sync`
+
+---
+
+## Known Naive Spots (on purpose — fix in the matching phase)
+
+| Where | What's naive | Fix in |
+|---|---|---|
+| Checkout | No locking — two buyers can pass the stock check for the last item | Phase 5 |
+| Checkout | Every click creates a new pending order (no idempotency key) | Phase 5 |
+| Webhook | If stock ran out after checkout, the stock `CHECK` fails and Stripe retries forever | Phase 5/6 (reservation) |
+| Orders | Abandoned `pending` orders are never cleaned up | Phase 6 (cleanup job) |
+| Auth | JWT in localStorage (XSS-readable); no refresh token; role baked into token | Phase 4 |
+| Search | Algolia only updates on `yarn algolia:sync`; free plan = 10k of 50k products indexed | Phase 8/9 |
+| DB | Foreign keys unindexed; price filter on an expression can't use `idx_products_price` | Phase 3 / 12 |
+| Seed | Attribute values equally likely (8K TVs as common as 4K) | nice-to-have |
+
+---
+
 ## Progress Summary
 
 | Phase | Topic | Status |
@@ -277,13 +381,15 @@
 | 0 | Foundation | ✅ Done |
 | 1 | Schema Design | ✅ Done |
 | 2 | Seed Data | ✅ Done |
-| 3 | Product APIs + Indexes | 🔄 In Progress |
-| 4 | Auth | 🔲 Not started |
-| 5 | Cart & Race Conditions | 🔲 Not started |
-| 6 | Stripe Payments | 🔲 Not started |
+| 3 | Product APIs + Indexes | ⏸️ APIs done, perf exercises paused |
+| 4 | Auth | 🔄 Register/login/JWT done — refresh, rate limit, OAuth pending |
+| 5 | Cart & Race Conditions | 🔄 Cart + naive checkout done — race-condition stages pending |
+| 6 | Stripe Payments | 🔄 Happy path + webhooks done — reservation, cleanup pending |
 | 7 | Redis Caching | 🔲 Not started |
-| 8 | Algolia Search | 🔲 Not started |
+| 8 | Algolia Search | 🔄 Search, autocomplete, facets done — live sync, sorting pending |
 | 9 | Background Jobs | 🔲 Not started |
 | 10 | Invoice PDF | 🔲 Not started |
-| 11 | Admin + Frontend | 🔲 Not started |
+| 11 | Admin + Frontend | 🔄 Customer pages done — admin pending |
 | 12 | Performance | 🔲 Not started |
+| — | Storefront UX (Amazon-style) | ✅ Done |
+| — | Realistic Catalog + Dynamic Filters | 🔄 Catalog + dynamic filters done — variants pending |

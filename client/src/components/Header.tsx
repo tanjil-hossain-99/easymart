@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { Link } from "react-router"
-import { ShoppingCart } from "lucide-react"
+import { CartIcon } from "@/components/CartIcon"
 import { CategoryBar } from "@/components/CategoryBar"
 import { SearchBar } from "@/components/SearchBar"
 import { useLogout } from "@/hooks/useAuth"
@@ -56,12 +56,7 @@ export function Header() {
           className={`${NAV_BLOCK} flex items-end gap-1`}
           aria-label={`Cart, ${cartCount} items`}
         >
-          <span className="relative">
-            <ShoppingCart className="size-8" />
-            <span className="absolute -top-1 left-1/2 -translate-x-1/2 text-sm font-bold text-brand">
-              {cartCount}
-            </span>
-          </span>
+          <CartIcon count={cartCount} />
           <span className="hidden text-sm font-bold sm:inline">Cart</span>
         </Link>
       </div>

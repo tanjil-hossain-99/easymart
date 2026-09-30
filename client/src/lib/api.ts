@@ -12,6 +12,21 @@ export class ApiError extends Error {
   }
 }
 
+// "That thing doesn't exist": 404, or 400 for a malformed id in the URL (e.g. /products/abc).
+// Pages show the not-found screen for these instead of a raw error message.
+export function isNotFoundError(error: unknown): boolean {
+  return (
+    error instanceof ApiError &&
+    (error.status === HttpStatus.NotFound || error.status === HttpStatus.BadRequest)
+  )
+}
+
+// 4xx = the request itself is wrong (not found, not allowed) — retrying can't fix it.
+// Only network errors and 5xx (server hiccups) are worth another try.
+export function isRetryableError(error: unknown): boolean {
+  return !(error instanceof ApiError) || error.status >= HttpStatus.InternalServerError
+}
+
 type FetchOptions = {
   method?: HttpMethod
   body?: unknown
@@ -45,14 +60,16 @@ export async function apiFetch<T>(path: string, options: FetchOptions = {}): Pro
   return res.json() as Promise<T>
 }
 
-type QueryParams = Record<string, string | number | boolean | undefined>
+type QueryValue = string | number | boolean | undefined
+type QueryParams = Record<string, QueryValue | string[]>
 
 // Turns (path, filters) into "/products?category_id=…&sort=…", skipping empty values.
-// Shared by /products and /search since they take the same filters.
+// Arrays become repeated params (?brand=LG&brand=Sony) — how multi-select filters are sent.
 export function buildUrl(path: string, params: QueryParams): string {
   const search = new URLSearchParams()
   for (const [key, value] of Object.entries(params)) {
-    if (value !== undefined && value !== "" && value !== false) search.set(key, String(value))
+    if (Array.isArray(value)) value.forEach((v) => search.append(key, v))
+    else if (value !== undefined && value !== "" && value !== false) search.set(key, String(value))
   }
   const query = search.toString()
   // No params → "/s", not "/s?"

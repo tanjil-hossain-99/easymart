@@ -1,7 +1,17 @@
 import { Request, Response, Router } from "express";
 import { searchClient } from "../config/algolia.js";
 import { ALGOLIA, HttpStatus, PAGINATION, UUID_REGEX } from "../constants.js";
-import type { ProductListRow, ProductSearchRecord, SearchSuggestionsResponse } from "../types.js";
+import type { SearchResponse } from "algoliasearch";
+import {
+  buildFacetGroups,
+  loadAttributeTypes,
+  loadCategoryAttributes,
+  parseSelections,
+  pickDominantCategory,
+  selectionToFilter,
+  type FacetSelection,
+} from "../search/facets.js";
+import type { ProductListRow, ProductSearchRecord, SearchFacets, SearchSuggestionsResponse } from "../types.js";
 import { buildQuerySuggestions } from "../utils/querySuggestions.js";
 
 const router = Router();
@@ -54,18 +64,42 @@ router.get("/", async (req: Request<{}, {}, {}, SearchQuery>, res: Response) => 
     Math.max(1, parseInt(req.query.limit ?? "") || ALGOLIA.defaultHitsPerPage),
   );
 
-  const result = await searchClient.searchSingleIndex<ProductSearchRecord>({
-    indexName: ALGOLIA.productsIndex,
-    searchParams: {
-      query: q,
-      filters: filters.join(" AND "),
-      page: page - 1, // Algolia pages start at 0, our API at 1
-      hitsPerPage: limit,
-    },
+  // Dynamic filters from the URL (?brand=LG&a.screen_size=45-56), validated against known attributes
+  const selections = parseSelections(req.query as Record<string, unknown>, await loadAttributeTypes());
+  const selectionFilters = selections.map((selection) => ({ selection, filter: selectionToFilter(selection) }));
+
+  // AND of: the fixed filters above + every selected group (each group is itself an OR)
+  const filtersExcept = (excluded?: FacetSelection) =>
+    [...filters, ...selectionFilters.filter((f) => f.selection !== excluded && f.filter).map((f) => f.filter)].join(" AND ");
+
+  // One round trip, several queries (Algolia multi-search):
+  //   [0] the real search: hits for this page + counts for every facet ("*")
+  //   [1…] one per active filter group, WITHOUT that group's own filter, asking only for its
+  //        counts — so after ticking "LG" the other brands still show how many they'd add
+  //        ("disjunctive faceting"). hitsPerPage: 0 = counts only, no products.
+  const { results } = await searchClient.search<ProductSearchRecord>({
+    requests: [
+      {
+        indexName: ALGOLIA.productsIndex,
+        query: q,
+        filters: filtersExcept(),
+        page: page - 1, // Algolia pages start at 0, our API at 1
+        hitsPerPage: limit,
+        facets: ["*"],
+      },
+      ...selections.map((selection) => ({
+        indexName: ALGOLIA.productsIndex,
+        query: q,
+        filters: filtersExcept(selection),
+        hitsPerPage: 0,
+        facets: [selection.facet],
+      })),
+    ],
   });
+  const [main, ...disjunctive] = results as SearchResponse<ProductSearchRecord>[];
 
   // Map Algolia records back to the same shape GET /products returns
-  const data: ProductListRow[] = result.hits.map((hit) => ({
+  const data: ProductListRow[] = main.hits.map((hit) => ({
     id: hit.objectID,
     title: hit.title,
     price: hit.price.toFixed(2),
@@ -78,28 +112,41 @@ router.get("/", async (req: Request<{}, {}, {}, SearchQuery>, res: Response) => 
     primary_image: hit.primary_image,
   }));
 
-  const total = result.nbHits ?? 0;
+  const total = main.nbHits ?? 0;
+
+  // Counts: from the main query, overridden per selected group by its disjunctive query
+  const counts = { ...main.facets };
+  selections.forEach((selection, i) => {
+    counts[selection.facet] = disjunctive[i]?.facets?.[selection.facet] ?? {};
+  });
+
+  // Whichever category most results belong to decides which filters appear
+  const categoryId = pickDominantCategory(main.facets?.category_id, total);
+  const definitions = categoryId ? await loadCategoryAttributes(categoryId) : [];
+  const facets: SearchFacets = { categoryId, groups: buildFacetGroups({ counts, definitions, selections }) };
+
   res.json({
     data,
     pagination: {
       page,
       limit,
       total,
-      totalPages: result.nbPages ?? 0,
+      totalPages: main.nbPages ?? 0,
     },
+    facets,
   });
 });
 
 // ─── GET /search/suggestions?q=gra&category_id=… ──────────────────────────────
-// Autocomplete for the header search box. One Algolia request gives us both
-// query completions (built from titles) and product suggestions (with images).
+// Autocomplete for the header search box. Every row is a search query (Amazon never
+// jumps from the dropdown straight to a product page); images are visual hints.
 type SuggestionsQuery = Partial<{ q: string; category_id: string }>;
 
 router.get("/suggestions", async (req: Request<{}, {}, {}, SuggestionsQuery>, res: Response) => {
   const q = (req.query.q ?? "").trim();
   const { category_id } = req.query;
 
-  const empty: SearchSuggestionsResponse = { queries: [], products: [] };
+  const empty: SearchSuggestionsResponse = { suggestions: [] };
   if (q.length < ALGOLIA.minSuggestionQueryLength) {
     res.json(empty);
     return;
@@ -122,16 +169,7 @@ router.get("/suggestions", async (req: Request<{}, {}, {}, SuggestionsQuery>, re
   });
 
   const response: SearchSuggestionsResponse = {
-    queries: buildQuerySuggestions(
-      q,
-      result.hits.map((hit) => hit.title),
-      ALGOLIA.maxQuerySuggestions,
-    ),
-    products: result.hits.slice(0, ALGOLIA.maxProductSuggestions).map((hit) => ({
-      id: hit.objectID,
-      title: hit.title,
-      primary_image: hit.primary_image,
-    })),
+    suggestions: buildQuerySuggestions(q, result.hits, ALGOLIA.maxSuggestions),
   };
   res.json(response);
 });

@@ -69,6 +69,7 @@ export const AUTH = {
 export const CART = {
   minQuantity: 1,
   defaultAddQuantity: 1,
+  maxBadgeCount: 99, // header cart shows "99+" above this
 } as const
 
 export const STORE_NAME = "EasyMart"
@@ -103,8 +104,14 @@ export type HttpMethod = (typeof HttpMethod)[keyof typeof HttpMethod]
 
 export const HttpStatus = {
   NoContent: 204,
+  BadRequest: 400,
   Unauthorized: 401,
+  NotFound: 404,
+  InternalServerError: 500, // 500 and up = server-side failures
 } as const
+
+// How many times a failed query is retried (only for retryable errors, see isRetryableError)
+export const QUERY_MAX_RETRIES = 1
 
 // ── API endpoints (paths on the server) ────────────────────────────────────
 
@@ -145,6 +152,7 @@ export const ROUTES = {
   checkout: "/checkout/:orderId",
   orders: "/orders",
   orderDetail: "/orders/:orderId",
+  notFound: "*", // catch-all: any URL that matched nothing above
 } as const
 
 // Build a real URL from a pattern, e.g. productUrl("abc") → "/products/abc"
@@ -194,6 +202,24 @@ export const Key = {
   ArrowUp: "ArrowUp",
   Escape: "Escape",
 } as const
+
+// Dynamic filter params — must match server/constants.ts FACET_PARAM
+//   ?brand=LG&brand=Sony&a.display_type=OLED&a.screen_size=45-56
+export const FACET_PARAM = {
+  brand: "brand",
+  attributePrefix: "a.",
+} as const
+
+// A filter group shows this many options before "See more", like Amazon
+export const FACET_VISIBLE_OPTIONS = 5
+
+// category_attributes.type — decides how a filter group is drawn
+export const AttributeType = {
+  Enum: "enum", // checkbox list
+  Number: "number", // checkbox list of ranges
+  Boolean: "boolean", // a single checkbox
+} as const
+export type AttributeType = (typeof AttributeType)[keyof typeof AttributeType]
 
 export const SEARCH = {
   // Wait until the user stops typing for this long before searching. Each Algolia

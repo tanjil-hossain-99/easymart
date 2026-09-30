@@ -5,11 +5,14 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "tsx server.ts",
+    "dev": "tsx server.ts",
     "server": "nodemon --exec tsx server.ts",
     "build": "tsc",
     "stripe:listen": "stripe listen --events payment_intent.succeeded,payment_intent.payment_failed --forward-to localhost:3000/webhooks/stripe",
-    "algolia:sync": "tsx db/algolia-sync.ts"
+    "algolia:sync": "tsx db/algolia-sync.ts",
+    "catalog:images": "tsx db/catalog/fetch-images.ts",
+    "migrate": "tsx db/migrate.ts",
+    "seed": "tsx db/seed.ts"
   },
   "keywords": [],
   "author": "",

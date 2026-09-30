@@ -24,7 +24,11 @@ export function useProducts(filters: ProductFilters, { enabled = true }: QueryTo
 export function useSearchProducts(filters: SearchFilters, { enabled = true }: QueryToggle = {}) {
   return useQuery<ProductsResponse>({
     queryKey: [QUERY_KEYS.search, filters],
-    queryFn: () => apiFetch(buildUrl(API_ENDPOINTS.search, filters)),
+    // Selections are spread into top-level params: ?brand=LG&a.screen_size=45-56
+    queryFn: () => {
+      const { facets, ...rest } = filters
+      return apiFetch(buildUrl(API_ENDPOINTS.search, { ...rest, ...facets }))
+    },
     enabled,
     // While the next query loads, keep showing the previous results
     // instead of flashing "Loading…" on every search

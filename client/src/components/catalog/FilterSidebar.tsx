@@ -2,26 +2,58 @@ import { useState, type FormEvent, type ReactNode } from "react"
 import { ChevronLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { FacetGroupFilter } from "@/components/catalog/FacetGroupFilter"
 import { useCategories } from "@/hooks/useProducts"
-import { PRICE_RANGES, type PriceRange } from "@/lib/constants"
+import { AttributeType, PRICE_RANGES, type PriceRange } from "@/lib/constants"
 import { formatWholePrice } from "@/lib/format"
-import type { CatalogFilters, Category } from "@/types/api"
+import type { CatalogFilters, Category, FacetGroup } from "@/types/api"
 
 type Props = {
   filters: CatalogFilters
+  // Dynamic groups from the search response (Brand, Screen Size…); absent when browsing without search
+  facetGroups?: FacetGroup[]
   onChange: (patch: Partial<CatalogFilters>) => void
 }
 
-export function FilterSidebar({ filters, onChange }: Props) {
+const FEATURES_TITLE = "Features"
+
+export function FilterSidebar({ filters, facetGroups = [], onChange }: Props) {
+  const selections = filters.facets ?? {}
+  const hasFacetSelections = Object.keys(selections).length > 0
   const hasActiveFilters =
-    !!filters.category_id || !!filters.min_price || !!filters.max_price || !!filters.has_discount
+    !!filters.category_id || !!filters.min_price || !!filters.max_price || !!filters.has_discount || hasFacetSelections
+
+  // Tick/untick one option; other groups' selections stay (LG + OLED + 65")
+  function toggle(param: string, value: string) {
+    const current = selections[param] ?? []
+    const next = current.includes(value) ? current.filter((v) => v !== value) : [...current, value]
+    const { [param]: _removed, ...others } = selections
+    onChange({ facets: next.length > 0 ? { ...others, [param]: next } : others })
+  }
+
+  // Yes/no attributes (Waterproof, Noise Cancelling) share one "Features" heading, like Amazon
+  const listGroups = facetGroups.filter((g) => g.type !== AttributeType.Boolean)
+  const featureGroups = facetGroups.filter((g) => g.type === AttributeType.Boolean)
 
   return (
     <aside className="flex w-56 shrink-0 flex-col gap-6 text-sm" aria-label="Filters">
       <DepartmentFilter
         selectedId={filters.category_id}
-        onSelect={(category_id) => onChange({ category_id })}
+        // A different category has different filters — drop the old category's selections
+        onSelect={(category_id) => onChange({ category_id, facets: undefined })}
       />
+
+      {listGroups.map((group) => (
+        <FacetGroupFilter key={group.param} group={group} onToggle={(value) => toggle(group.param, value)} />
+      ))}
+
+      {featureGroups.length > 0 && (
+        <FilterGroup title={FEATURES_TITLE}>
+          {featureGroups.map((group) => (
+            <FacetGroupFilter key={group.param} group={group} onToggle={(value) => toggle(group.param, value)} />
+          ))}
+        </FilterGroup>
+      )}
 
       <PriceFilter
         min={filters.min_price}
@@ -52,6 +84,7 @@ export function FilterSidebar({ filters, onChange }: Props) {
               min_price: undefined,
               max_price: undefined,
               has_discount: undefined,
+              facets: undefined,
             })
           }
           className="self-start text-brand-text hover:underline"

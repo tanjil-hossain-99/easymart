@@ -5,9 +5,11 @@ import pool from "./pool.js";
 import { FINAL_PRICE_SQL } from "./sql.js";
 
 // Usage: yarn algolia:sync
-// Copies products from Postgres (the source of truth) into Algolia (a search copy).
-// Safe to re-run: records are keyed by objectID = product id, so existing ones are
-// overwritten instead of duplicated.
+// Rebuilds the Algolia index from Postgres (the source of truth). Algolia is only a
+// search copy, so the index is cleared first — otherwise products that no longer exist
+// (e.g. after a reseed, which creates new ids) would stay searchable as "ghost" results.
+// Trade-off: search is empty for the ~2 minutes the rebuild takes. Fine for dev; a live
+// store would build a new index and swap it in atomically (replaceAllObjects).
 
 type ProductForIndexRow = Omit<
   ProductSearchRecord,
@@ -22,7 +24,14 @@ type ProductForIndexRow = Omit<
 };
 
 async function sync() {
-  console.log(`Loading up to ${ALGOLIA.maxRecords} active products from Postgres...`);
+  // The free plan holds maxRecords products, but the catalog has more. Give every
+  // category a fair share — "newest N overall" could leave whole product types
+  // (e.g. every TV) out of search, because products are created type by type.
+  const categories = await pool.query<{ count: string }>(
+    `SELECT COUNT(DISTINCT category_id) AS count FROM products WHERE is_active = true`,
+  );
+  const perCategory = Math.floor(ALGOLIA.maxRecords / Number(categories.rows[0].count));
+  console.log(`Loading up to ${perCategory} active products per category from Postgres...`);
 
   const result = await pool.query<ProductForIndexRow>(
     `SELECT
@@ -31,15 +40,19 @@ async function sync() {
        EXTRACT(EPOCH FROM p.created_at)::BIGINT AS created_at_ts,
        c.id AS category_id, c.parent_id AS parent_category_id, c.name AS category_name,
        m.id AS merchant_id, m.name AS merchant_name,
+       p.brand, p.attributes,
        pi.url AS primary_image
-     FROM products p
+     FROM (
+       -- Number products within each category (newest first), keep the first N of each
+       SELECT *, ROW_NUMBER() OVER (PARTITION BY category_id ORDER BY created_at DESC, id) AS rank_in_category
+       FROM products
+       WHERE is_active = true
+     ) p
      JOIN categories c ON c.id = p.category_id
      JOIN merchants m ON m.id = p.merchant_id
      LEFT JOIN product_images pi ON pi.product_id = p.id AND pi.is_primary = true
-     WHERE p.is_active = true
-     ORDER BY p.created_at DESC
-     LIMIT $2`,
-    [ALGOLIA.descriptionMaxLength, ALGOLIA.maxRecords],
+     WHERE p.rank_in_category <= $2`,
+    [ALGOLIA.descriptionMaxLength, perCategory],
   );
 
   const records: ProductSearchRecord[] = result.rows.map(
@@ -56,19 +69,34 @@ async function sync() {
     }),
   );
 
+  // Every attribute any category can filter by (screen_size, fit, ram, …)
+  const keys = await pool.query<{ key: string }>(`SELECT DISTINCT key FROM category_attributes ORDER BY key`);
+  const attributeKeys = keys.rows.map((row) => row.key);
+
   // Index settings: what's searchable, what's filterable, how to break ties
   await adminClient.setSettings({
     indexName: ALGOLIA.productsIndex,
     indexSettings: {
       // Order = importance: a match in the title beats a match in the description.
       // unordered(): position of the word inside the description doesn't matter
-      searchableAttributes: ["title", "category_name", "merchant_name", "unordered(description)"],
-      // filterOnly: we filter by category ids but never show counts per id
-      attributesForFaceting: ["filterOnly(category_ids)"],
+      searchableAttributes: ["title", "brand", "category_name", "merchant_name", "unordered(description)"],
+      attributesForFaceting: [
+        // filterOnly: used in filters, but we never need counts per id
+        "filterOnly(category_ids)",
+        // Faceted = Algolia returns counts per value with every search. These drive the
+        // dynamic sidebar: category_id picks which filters to show, the rest are the filters.
+        "category_id",
+        "brand",
+        ...attributeKeys.map((key) => `${ALGOLIA.attributeFacetPrefix}${key}`),
+      ],
       // When relevance ties, show bigger discounts, then newer products first
       customRanking: ["desc(discount)", "desc(created_at_ts)"],
     },
   });
+
+  console.log("Clearing the old index...");
+  const cleared = await adminClient.clearObjects({ indexName: ALGOLIA.productsIndex });
+  await adminClient.waitForTask({ indexName: ALGOLIA.productsIndex, taskID: cleared.taskID });
 
   console.log(`Uploading ${records.length} records in batches of ${ALGOLIA.batchSize}...`);
   await adminClient.saveObjects({

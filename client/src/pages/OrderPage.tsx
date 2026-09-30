@@ -1,6 +1,7 @@
 import { useEffect } from "react"
 import { Link, useParams, useSearchParams } from "react-router"
 import { useOrder } from "@/hooks/useOrders"
+import { isNotFoundError } from "@/lib/api"
 import {
   ORDER_STATUS_LABELS,
   OrderStatus,
@@ -11,6 +12,7 @@ import {
 } from "@/lib/constants"
 import { formatPrice } from "@/lib/format"
 import { queryClient } from "@/lib/queryClient"
+import { NotFoundPage } from "@/pages/NotFoundPage"
 
 export function OrderPage() {
   const { orderId } = useParams()
@@ -31,6 +33,8 @@ export function OrderPage() {
   }, [isPaid])
 
   if (isPending) return <p className="p-6">Loading…</p>
+  // Someone else's order, or an id that doesn't exist → same not-found screen
+  if (isError && isNotFoundError(error)) return <NotFoundPage thing="order" />
   if (isError) return <p className="p-6 text-destructive">{error.message}</p>
 
   const isAwaitingPayment = order.status === OrderStatus.Pending

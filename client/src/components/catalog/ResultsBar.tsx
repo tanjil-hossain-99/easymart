@@ -3,15 +3,15 @@ import type { Pagination } from "@/types/api"
 
 type Props = {
   query?: string
+  // Results come from the search engine, ordered by relevance (no price/date sorting yet)
+  relevanceOrder: boolean
   pagination?: Pagination
   sort?: ProductSort
   onSortChange: (sort: ProductSort) => void
 }
 
 // "1-20 of 811 results for "chicken""          [Sort by: Featured ▾]
-export function ResultsBar({ query, pagination, sort, onSortChange }: Props) {
-  const isSearching = !!query
-
+export function ResultsBar({ query, relevanceOrder, pagination, sort, onSortChange }: Props) {
   return (
     <div className="flex items-center justify-between gap-4 border-b px-4 py-2 shadow-sm">
       <p className="text-sm">{pagination ? <ResultsCount query={query} pagination={pagination} /> : " "}</p>
@@ -19,7 +19,7 @@ export function ResultsBar({ query, pagination, sort, onSortChange }: Props) {
       <label className="flex items-center gap-2 rounded-md border bg-muted px-2 py-1 text-sm shadow-sm">
         Sort by:
         {/* Search results come back in relevance order — price/date sorting needs Algolia replicas */}
-        {isSearching ? (
+        {relevanceOrder ? (
           <select disabled className="bg-transparent" title="Search results are sorted by relevance">
             <option>{RELEVANCE_SORT_LABEL}</option>
           </select>

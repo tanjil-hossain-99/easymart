@@ -48,6 +48,7 @@
     --color-brand-hover: var(--brand-hover);
     --color-brand-text: var(--brand-text);
     --color-overlay: var(--overlay);
+    --color-brand-strong: var(--brand-strong);
     --radius-sm: calc(var(--radius) * 0.6);
     --radius-md: calc(var(--radius) * 0.8);
     --radius-lg: var(--radius);
@@ -98,6 +99,7 @@
     --brand-foreground: oklch(0.2 0.02 255);
     --brand-text: oklch(0.55 0.15 55);     /* darker orange: readable as text on white */
     --overlay: oklch(0 0 0 / 50%);         /* dims the page while the search box is focused */
+    --brand-strong: oklch(0.72 0.18 58);   /* saturated orange: cart count on the dark nav */
 }
 
 .dark {
@@ -140,6 +142,7 @@
     --brand-foreground: oklch(0.17 0.02 255);
     --brand-text: oklch(0.8 0.13 75);
     --overlay: oklch(0 0 0 / 60%);
+    --brand-strong: oklch(0.74 0.18 58);
 }
 
 @layer base {

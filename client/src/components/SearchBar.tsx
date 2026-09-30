@@ -5,8 +5,9 @@ import { SearchSuggestions } from "@/components/SearchSuggestions"
 import { catalogUrl, useCatalogParams } from "@/hooks/useCatalogParams"
 import { useDebouncedValue } from "@/hooks/useDebouncedValue"
 import { useCategories, useSearchSuggestions } from "@/hooks/useProducts"
-import { Key, SEARCH, productUrl } from "@/lib/constants"
-import { suggestionOptionId, type Suggestion } from "@/lib/searchSuggestions"
+import { Key, SEARCH } from "@/lib/constants"
+import { suggestionOptionId } from "@/lib/searchSuggestions"
+import type { QuerySuggestion } from "@/types/api"
 
 type SearchBarProps = {
   // Tells the header when the search box is active, so it can dim the rest of the page
@@ -62,14 +63,8 @@ function SearchForm({ initialText, initialDepartment, onActiveChange }: SearchFo
   const typed = useDebouncedValue(text.trim(), SEARCH.suggestionDebounceMs)
   const { data } = useSearchSuggestions(typed, department || undefined)
 
-  // Flatten both kinds into one list so arrow keys move through all rows in order
-  const suggestions: Suggestion[] =
-    typed.length >= SEARCH.minSuggestionLength && data
-      ? [
-          ...data.queries.map((text): Suggestion => ({ kind: "query", text })),
-          ...data.products.map((product): Suggestion => ({ kind: "product", product })),
-        ]
-      : []
+  const suggestions: QuerySuggestion[] =
+    typed.length >= SEARCH.minSuggestionLength && data ? data.suggestions : []
   const showSuggestions = isOpen && suggestions.length > 0
 
   function runSearch(query: string) {
@@ -78,15 +73,11 @@ function SearchForm({ initialText, initialDepartment, onActiveChange }: SearchFo
     navigate(catalogUrl({ q: query.trim() || undefined, category_id: department || undefined }))
   }
 
-  function selectSuggestion(suggestion: Suggestion) {
-    if (suggestion.kind === "query") {
-      setText(suggestion.text)
-      runSearch(suggestion.text)
-    } else {
-      // Product rows go straight to the product page
-      setIsOpen(false)
-      navigate(productUrl(suggestion.product.id))
-    }
+  // Every row is a search, like Amazon — even rows with a product image go to
+  // the results page, never straight to one product
+  function selectSuggestion(suggestion: QuerySuggestion) {
+    setText(suggestion.text)
+    runSearch(suggestion.text)
   }
 
   function handleSubmit(e: FormEvent) {

@@ -6,6 +6,7 @@ import { AuthPage } from "@/pages/AuthPage"
 import { CartPage } from "@/pages/CartPage"
 import { CheckoutPage } from "@/pages/CheckoutPage"
 import { HomePage } from "@/pages/HomePage"
+import { NotFoundPage } from "@/pages/NotFoundPage"
 import { OrderPage } from "@/pages/OrderPage"
 import { OrdersPage } from "@/pages/OrdersPage"
 import { ProductDetailPage } from "@/pages/ProductDetailPage"
@@ -38,6 +39,10 @@ export default function App() {
           <Route path={ROUTES.orders} element={<OrdersPage />} />
           <Route path={ROUTES.orderDetail} element={<OrderPage />} />
         </Route>
+
+        {/* Catch-all. React Router ranks routes by specificity, so "*" only
+            matches when no other route does */}
+        <Route path={ROUTES.notFound} element={<NotFoundPage />} />
       </Route>
     </Routes>
   )

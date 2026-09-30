@@ -3,7 +3,9 @@ import { BuyBox } from "@/components/product/BuyBox"
 import { CategoryBreadcrumb } from "@/components/product/CategoryBreadcrumb"
 import { ImageGallery } from "@/components/product/ImageGallery"
 import { useProduct } from "@/hooks/useProducts"
+import { isNotFoundError } from "@/lib/api"
 import { formatPercent, formatPrice } from "@/lib/format"
+import { NotFoundPage } from "@/pages/NotFoundPage"
 import type { ProductDetail } from "@/types/api"
 
 // Amazon-style product page:
@@ -11,10 +13,14 @@ import type { ProductDetail } from "@/types/api"
 //   [ gallery ] [ title, price, about this item ] [ buy box ]
 export function ProductDetailPage() {
   const { id } = useParams()
-  const { data: product, isPending, isError } = useProduct(id!)
+  const { data: product, isPending, isError, error } = useProduct(id!)
 
   if (isPending) return <p className="p-6 text-muted-foreground">Loading…</p>
-  if (isError) return <p className="p-6 text-destructive">Product not found.</p>
+  if (isError) {
+    // Deleted/inactive product or a mangled link → friendly not-found, not a raw error
+    if (isNotFoundError(error)) return <NotFoundPage thing="product" />
+    return <p className="p-6 text-destructive">Couldn't load this product. Please try again.</p>
+  }
 
   // Products without variants keep their stock on the row with variant_id = null
   const stock = product.inventory.find((i) => i.variant_id === null)?.quantity ?? 0
@@ -77,7 +83,8 @@ function ProductInfo({ product }: { product: ProductDetail }) {
 
       <section>
         <h2 className="mb-1 font-bold">About this item</h2>
-        <p className="leading-relaxed">{product.description}</p>
+        {/* whitespace-pre-line: the description is one feature per line */}
+        <p className="leading-relaxed whitespace-pre-line">{product.description}</p>
       </section>
     </div>
   )

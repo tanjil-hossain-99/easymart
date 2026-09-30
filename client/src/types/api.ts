@@ -1,4 +1,4 @@
-import type { OrderStatus, ProductSort, UserRole } from "@/lib/constants"
+import type { AttributeType, OrderStatus, ProductSort, UserRole } from "@/lib/constants"
 
 // Shapes of the server's JSON responses.
 // Money fields are strings: Postgres NUMERIC comes back as a string to avoid float rounding.
@@ -75,9 +75,34 @@ export type Pagination = {
   totalPages: number
 }
 
+// ── Dynamic filters (only on /search responses) ────────────────────────────
+
+export type FacetOption = {
+  value: string // goes in the URL: "LG", "true", or a range "45-56"
+  label: string // shown: "LG", "45 to 56 in"
+  count: number
+  selected: boolean
+}
+
+export type FacetGroup = {
+  param: string // URL param: "brand" or "a.screen_size"
+  label: string
+  type: AttributeType
+  options: FacetOption[]
+}
+
+export type SearchFacets = {
+  categoryId: string | null // dominant category whose filters are shown (null = mixed results)
+  groups: FacetGroup[]
+}
+
+// Selected dynamic filters: URL param → chosen values, e.g. { brand: ["LG"], "a.screen_size": ["45-56"] }
+export type FacetSelections = Record<string, string[]>
+
 export type ProductsResponse = {
   data: Product[]
   pagination: Pagination
+  facets?: SearchFacets // present on /search responses
 }
 
 export type ProductFilters = {
@@ -90,25 +115,27 @@ export type ProductFilters = {
   limit?: number
 }
 
-export type ProductSuggestion = {
-  id: string
-  title: string
-  primary_image: string | null
+// One autocomplete row. Always a search query — clicking it searches, like Amazon;
+// the image is only a visual hint from a matching product.
+export type QuerySuggestion = {
+  text: string
+  image: string | null
 }
 
 export type SearchSuggestions = {
-  queries: string[]
-  products: ProductSuggestion[]
+  suggestions: QuerySuggestion[]
 }
 
 // Everything the catalog page can be filtered by (lives in the URL)
 export type CatalogFilters = ProductFilters & {
   q?: string
+  facets?: FacetSelections
 }
 
 // Search uses the same filters, minus sort (Algolia orders by relevance), plus the text query
 export type SearchFilters = Omit<ProductFilters, "sort"> & {
   q: string
+  facets?: FacetSelections
 }
 
 // ── Cart ───────────────────────────────────────────────────────────────────
