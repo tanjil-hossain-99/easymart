@@ -355,7 +355,7 @@
 - **Frontend stack**: `fetch` wrapper (`apiFetch`) + TanStack Query for server state + Zustand for auth; react-router v7
 - **Scripts (server)**: `yarn migrate`, `yarn seed`, `yarn algolia:sync`, `yarn catalog:images`, `yarn stripe:listen`,
   `npx tsx db/make-admin.ts <email>`
-- **New machine setup**: create the `easymart` DB → copy `.env.example` to `.env` → `yarn migrate` → `yarn seed` → `yarn algolia:sync`
+- **New machine setup**: see [`SETUP.md`](SETUP.md) (tools, `.env` files, Stripe CLI, seed + search index, troubleshooting)
 
 ---
 
