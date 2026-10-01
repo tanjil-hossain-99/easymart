@@ -2,6 +2,7 @@ import { Request, Response, Router } from "express";
 import { stripe } from "../config/stripe.js";
 import { HttpStatus, OrderStatus } from "../constants.js";
 import pool from "../db/pool.js";
+import { withTransaction } from "../db/transaction.js";
 import { requireAuth } from "../middleware/auth.js";
 import type { OrderItemDetailRow, OrderRow, OrderSummaryRow } from "../types.js";
 
@@ -42,12 +43,12 @@ router.get("/", async (req: Request, res: Response) => {
 });
 
 // ─── GET /orders/:id ──────────────────────────────────────────────────────────
-// One order with its items. While the order is still pending, also returns the
-// Stripe client_secret so the payment page works even after a page refresh.
+// One order with its items. While the order is still pending (Stripe), also
+// returns the client_secret so the payment page works after a page refresh.
 router.get("/:id", async (req: Request<{ id: string }>, res: Response) => {
   // user_id in the WHERE is the ownership check — other users get a 404
   const orderResult = await pool.query<OrderRow>(
-    `SELECT id, status, total_amount, stripe_payment_intent_id, created_at
+    `SELECT id, status, total_amount, stripe_payment_intent_id, payment_method, created_at
      FROM orders
      WHERE id = $1 AND user_id = $2`,
     [req.params.id, req.user!.id],
@@ -81,6 +82,7 @@ router.get("/:id", async (req: Request<{ id: string }>, res: Response) => {
     id: order.id,
     status: order.status,
     total_amount: order.total_amount,
+    payment_method: order.payment_method,
     created_at: order.created_at,
     items: items.rows,
     clientSecret,
@@ -110,6 +112,56 @@ router.patch("/:id/address", async (req: Request<{ id: string }>, res: Response)
   if (result.rows.length === 0) {
     res.status(HttpStatus.NotFound).json({ error: "Order not found or already paid" });
     return;
+  }
+
+  res.status(HttpStatus.NoContent).send();
+});
+
+// ─── POST /orders/:id/cod ────────────────────────────────────────────────────
+// Place a Cash on Delivery order. Only allowed when the shipping city is Dhaka.
+// Cancels the Stripe PaymentIntent (cleanup), clears the cart, and sets status
+// to "confirmed" so the customer sees their order without going through Stripe.
+router.post("/:id/cod", async (req: Request<{ id: string }>, res: Response) => {
+  const orderResult = await pool.query<
+    Pick<OrderRow, "id" | "status" | "stripe_payment_intent_id"> & { shipping_city: string | null }
+  >(
+    `SELECT id, status, stripe_payment_intent_id, shipping_city
+     FROM orders
+     WHERE id = $1 AND user_id = $2`,
+    [req.params.id, req.user!.id],
+  );
+
+  const order = orderResult.rows[0];
+  if (!order) {
+    res.status(HttpStatus.NotFound).json({ error: "Order not found" });
+    return;
+  }
+  if (order.status !== OrderStatus.Pending) {
+    res.status(HttpStatus.Conflict).json({ error: "Order is no longer pending" });
+    return;
+  }
+  if (!order.shipping_city) {
+    res.status(HttpStatus.BadRequest).json({ error: "Shipping address must be saved before placing a COD order" });
+    return;
+  }
+
+  // Mark order confirmed + clear the user's cart atomically
+  await withTransaction(async (client) => {
+    await client.query(
+      `UPDATE orders SET status = $1, payment_method = 'cod' WHERE id = $2`,
+      [OrderStatus.Confirmed, order.id],
+    );
+    await client.query(
+      `DELETE FROM cart_items WHERE cart_id = (SELECT id FROM carts WHERE user_id = $1)`,
+      [req.user!.id],
+    );
+  });
+
+  // Cancel the Stripe PaymentIntent in the background — fire and forget
+  if (order.stripe_payment_intent_id) {
+    stripe.paymentIntents.cancel(order.stripe_payment_intent_id).catch(() => {
+      // Non-fatal: if it fails Stripe will auto-expire the intent eventually
+    });
   }
 
   res.status(HttpStatus.NoContent).send();

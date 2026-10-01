@@ -1,7 +1,6 @@
 import { useState } from "react"
 import { Link } from "react-router"
 import { CartIcon } from "@/components/CartIcon"
-import { CategoryBar } from "@/components/CategoryBar"
 import { SearchBar } from "@/components/SearchBar"
 import { useLogout } from "@/hooks/useAuth"
 import { useCart } from "@/hooks/useCart"
@@ -62,8 +61,6 @@ export function Header() {
           <span className="hidden text-sm font-bold sm:inline">Cart</span>
         </Link>
       </div>
-
-      <CategoryBar />
 
       {/* Amazon-style focus overlay: dims everything below the top bar.
           Clicking it moves focus off the input, which closes the search (via onBlur). */}

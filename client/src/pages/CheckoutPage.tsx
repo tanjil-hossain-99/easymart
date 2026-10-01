@@ -1,9 +1,9 @@
 import { useState, type FormEvent } from "react"
 import { Elements, PaymentElement, useElements, useStripe } from "@stripe/react-stripe-js"
-import { Navigate, useParams } from "react-router"
+import { Navigate, useNavigate, useParams } from "react-router"
 import { Button } from "@/components/ui/button"
 import { useAddresses, useSaveOrderAddress } from "@/hooks/useAddresses"
-import { useOrder } from "@/hooks/useOrders"
+import { useOrder, usePlaceCodOrder } from "@/hooks/useOrders"
 import { isNotFoundError } from "@/lib/api"
 import { orderUrl } from "@/lib/constants"
 import { formatPrice } from "@/lib/format"
@@ -53,7 +53,7 @@ function AddressStep({
 
     await saveAddress.mutateAsync(
       { orderId, ...payload },
-      { onSuccess: onDone },
+      { onSuccess: () => onDone() },
     )
   }
 
@@ -187,9 +187,108 @@ function AddressStep({
   )
 }
 
-// ── Payment step ──────────────────────────────────────────────────────────────
+// ── Payment method step ────────────────────────────────────────────────────────
 
-function PaymentForm({ orderId }: { orderId: string }) {
+function PaymentMethodStep({
+  orderId,
+  clientSecret,
+  onChangeAddress,
+}: {
+  orderId: string
+  clientSecret: string
+  onChangeAddress: () => void
+}) {
+  const navigate = useNavigate()
+  const placeCod = usePlaceCodOrder(orderId)
+  const [method, setMethod] = useState<"cod" | "stripe">("cod")
+
+  async function handlePlaceCod() {
+    await placeCod.mutateAsync(undefined, {
+      onSuccess: () => navigate(orderUrl(orderId), { replace: true }),
+    })
+  }
+
+  return (
+    <div className="space-y-4">
+      <h2 className="text-lg font-semibold">Payment method</h2>
+
+      <div className="space-y-2">
+        {/* COD option */}
+        <label
+          className={`flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition ${
+            method === "cod" ? "border-primary bg-primary/5" : "hover:border-muted-foreground"
+          }`}
+        >
+          <input
+            type="radio"
+            name="payment"
+            checked={method === "cod"}
+            onChange={() => setMethod("cod")}
+            className="mt-0.5 shrink-0"
+          />
+          <div className="text-sm">
+            <p className="font-medium">Cash on Delivery</p>
+            <p className="text-muted-foreground">Pay when your order arrives at your door.</p>
+          </div>
+        </label>
+
+        {/* Online payment option */}
+        <label
+          className={`flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition ${
+            method === "stripe" ? "border-primary bg-primary/5" : "hover:border-muted-foreground"
+          }`}
+        >
+          <input
+            type="radio"
+            name="payment"
+            checked={method === "stripe"}
+            onChange={() => setMethod("stripe")}
+            className="mt-0.5 shrink-0"
+          />
+          <div className="text-sm">
+            <p className="font-medium">Pay online</p>
+            <p className="text-muted-foreground">Credit / debit card, and more.</p>
+          </div>
+        </label>
+      </div>
+
+      {/* COD confirm button */}
+      {method === "cod" && (
+        <>
+          {placeCod.isError && (
+            <p className="text-sm text-destructive">
+              {(placeCod.error as Error)?.message ?? "Failed to place order. Please try again."}
+            </p>
+          )}
+          <Button
+            size="lg"
+            className="w-full"
+            onClick={handlePlaceCod}
+            disabled={placeCod.isPending}
+          >
+            {placeCod.isPending ? "Placing order…" : "Place order (pay on delivery)"}
+          </Button>
+        </>
+      )}
+
+      {/* Stripe payment form */}
+      {method === "stripe" && (
+        <Elements stripe={stripePromise} options={{ clientSecret }}>
+          <StripePaymentForm orderId={orderId} />
+        </Elements>
+      )}
+
+      <button
+        onClick={onChangeAddress}
+        className="text-sm text-primary hover:underline"
+      >
+        ← Change address
+      </button>
+    </div>
+  )
+}
+
+function StripePaymentForm({ orderId }: { orderId: string }) {
   const stripe = useStripe()
   const elements = useElements()
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
@@ -213,7 +312,6 @@ function PaymentForm({ orderId }: { orderId: string }) {
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-      <h2 className="text-lg font-semibold">Payment</h2>
       <PaymentElement />
       {errorMessage && <p className="text-sm text-destructive">{errorMessage}</p>}
       <Button type="submit" size="lg" disabled={!stripe || submitting}>
@@ -233,7 +331,8 @@ export function CheckoutPage() {
   if (isPending) return <p className="p-6">Loading…</p>
   if (isError && isNotFoundError(error)) return <NotFoundPage thing="order" />
   if (isError) return <p className="p-6 text-destructive">{error.message}</p>
-  if (!order.clientSecret) return <Navigate to={orderUrl(order.id)} replace />
+  // Already paid (Stripe webhook) or COD-confirmed — redirect to order detail
+  if (!order.clientSecret || order.status === "confirmed") return <Navigate to={orderUrl(order.id)} replace />
 
   return (
     <div className="mx-auto max-w-lg p-6">
@@ -253,21 +352,18 @@ export function CheckoutPage() {
       </p>
 
       {step === "address" && (
-        <AddressStep orderId={order.id} onDone={() => setStep("payment")} />
+        <AddressStep
+          orderId={order.id}
+          onDone={() => setStep("payment")}
+        />
       )}
 
       {step === "payment" && (
-        <>
-          <button
-            onClick={() => setStep("address")}
-            className="mb-4 text-sm text-primary hover:underline"
-          >
-            ← Change address
-          </button>
-          <Elements stripe={stripePromise} options={{ clientSecret: order.clientSecret }}>
-            <PaymentForm orderId={order.id} />
-          </Elements>
-        </>
+        <PaymentMethodStep
+          orderId={order.id}
+          clientSecret={order.clientSecret}
+          onChangeAddress={() => setStep("address")}
+        />
       )}
     </div>
   )

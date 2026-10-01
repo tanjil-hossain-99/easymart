@@ -99,6 +99,7 @@ export type OrderRow = {
   status: OrderStatus;
   total_amount: string;
   stripe_payment_intent_id: string | null;
+  payment_method: "stripe" | "cod";
   created_at: Date;
 };
 

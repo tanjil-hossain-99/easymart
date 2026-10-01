@@ -13,6 +13,17 @@ export function useCheckout() {
   })
 }
 
+// Confirm a COD order — skips Stripe, clears cart, sets status to "confirmed"
+export function usePlaceCodOrder(orderId: string) {
+  return useMutation({
+    mutationFn: () => apiFetch(API_ENDPOINTS.orderCod(orderId), { method: HttpMethod.Post }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.orders] })
+      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.order, orderId] })
+    },
+  })
+}
+
 export function useOrders() {
   return useQuery<OrderSummary[]>({
     queryKey: [QUERY_KEYS.orders],

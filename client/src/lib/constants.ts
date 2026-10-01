@@ -20,6 +20,7 @@ export type ProductSort = (typeof ProductSort)[keyof typeof ProductSort]
 // Must match server OrderStatus
 export const OrderStatus = {
   Pending: "pending",
+  Confirmed: "confirmed",
   Paid: "paid",
   Shipped: "shipped",
   Cancelled: "cancelled",
@@ -28,6 +29,7 @@ export type OrderStatus = (typeof OrderStatus)[keyof typeof OrderStatus]
 
 export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
   [OrderStatus.Pending]: "Awaiting payment",
+  [OrderStatus.Confirmed]: "Confirmed (COD)",
   [OrderStatus.Paid]: "Paid",
   [OrderStatus.Shipped]: "Shipped",
   [OrderStatus.Cancelled]: "Cancelled",
@@ -132,6 +134,8 @@ export const API_ENDPOINTS = {
   checkout: "/checkout",
   orders: "/orders",
   order: (id: string) => `/orders/${id}`,
+  orderAddress: (id: string) => `/orders/${id}/address`,
+  orderCod: (id: string) => `/orders/${id}/cod`,
   addresses: "/addresses",
 } as const
 

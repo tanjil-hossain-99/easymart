@@ -227,7 +227,8 @@ export type Order = {
   id: string
   status: OrderStatus
   total_amount: string
+  payment_method: "stripe" | "cod"
   created_at: string
   items: OrderItem[]
-  clientSecret: string | null // only present while the order is unpaid
+  clientSecret: string | null // only present while a Stripe order is unpaid
 }

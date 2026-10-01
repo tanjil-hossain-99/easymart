@@ -64,7 +64,8 @@ export type AttributeType = (typeof AttributeType)[keyof typeof AttributeType];
 
 // Must match the CHECK constraint on orders.status. Keep in sync with the client.
 export const OrderStatus = {
-  Pending: "pending", // created, waiting for payment
+  Pending: "pending",    // created, waiting for payment (Stripe)
+  Confirmed: "confirmed", // COD order placed, payment on delivery
   Paid: "paid",
   Shipped: "shipped",
   Cancelled: "cancelled",
