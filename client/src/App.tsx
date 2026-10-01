@@ -1,4 +1,3 @@
-import { Outlet, Route, Routes } from "react-router"
 import { Header } from "@/components/Header"
 import { RequireAuth } from "@/components/RequireAuth"
 import { AuthMode, ROUTES } from "@/lib/constants"
@@ -10,8 +9,9 @@ import { NotFoundPage } from "@/pages/NotFoundPage"
 import { OrderPage } from "@/pages/OrderPage"
 import { OrdersPage } from "@/pages/OrdersPage"
 import { ProductDetailPage } from "@/pages/ProductDetailPage"
-import { ProfilePage } from "@/pages/ProfilePage"
 import { ProductsPage } from "@/pages/ProductsPage"
+import { ProfilePage } from "@/pages/ProfilePage"
+import { Outlet, Route, Routes } from "react-router"
 
 // Shared layout: header on every page, the matched route renders in <Outlet />
 function Layout() {

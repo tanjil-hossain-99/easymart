@@ -217,4 +217,5 @@ export type UpdateCartItemBody = Partial<{ quantity: number }>;
 export type TokenPayload = {
   sub: string; // user id
   role: UserRole;
+  iat?: number; // issued-at unix timestamp (set by jsonwebtoken automatically)
 };

@@ -89,4 +89,12 @@ router.get("/me", requireAuth, async (req: Request, res: Response) => {
   res.json(result.rows[0]);
 });
 
+// ─── POST /auth/logout ────────────────────────────────────────────────────────
+// Stamps last_logout_at so requireAuth rejects this token from now on,
+// even though it hasn't expired yet.
+router.post("/logout", requireAuth, async (req: Request, res: Response) => {
+  await pool.query(`UPDATE users SET last_logout_at = NOW() WHERE id = $1`, [req.user!.id]);
+  res.status(HttpStatus.NoContent).send();
+});
+
 export default router;

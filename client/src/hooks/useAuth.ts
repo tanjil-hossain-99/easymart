@@ -24,9 +24,15 @@ export const useRegister = () => useAuthMutation(API_ENDPOINTS.auth.register)
 
 export function useLogout() {
   const logout = useAuthStore((s) => s.logout)
-  return () => {
+  return async () => {
+    // Tell the server to stamp last_logout_at — invalidates the token server-side.
+    // Fire-and-forget: even if it fails we still clear the client session.
+    try {
+      await apiFetch("/auth/logout", { method: HttpMethod.Post })
+    } catch {
+      // ignore — network error or already expired token
+    }
     logout()
-    // Forget cached data from the previous user (e.g. their cart)
     queryClient.clear()
   }
 }

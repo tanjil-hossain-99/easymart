@@ -26,6 +26,19 @@ router.post("/", async (req: Request, res: Response) => {
     return;
   }
 
+  if (
+    String(full_name).length > 255 ||
+    String(line1).length > 255 ||
+    String(line2 ?? "").length > 255 ||
+    String(city).length > 100 ||
+    String(state).length > 100 ||
+    String(postal_code).length > 20 ||
+    String(country ?? "").length > 100
+  ) {
+    res.status(HttpStatus.BadRequest).json({ error: "One or more fields exceed the maximum allowed length" });
+    return;
+  }
+
   const client = await pool.connect();
   try {
     await client.query("BEGIN");

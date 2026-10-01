@@ -1,5 +1,6 @@
 import cors from "cors";
 import express, { Request, Response } from "express";
+import rateLimit from "express-rate-limit";
 import { env } from "./config/env.js";
 import { HttpStatus } from "./constants.js";
 import pool from "./db/pool.js";
@@ -43,6 +44,16 @@ app.get("/health", async (_req: Request, res: Response) => {
 app.use("/products", productsRouter);
 app.use("/categories", categoriesRouter);
 app.use("/search", searchRouter);
+// 20 attempts per 15 minutes per IP — stops brute-force without blocking real users
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many attempts, please try again later" },
+})
+app.use("/auth/login", authLimiter);
+app.use("/auth/register", authLimiter);
 app.use("/auth", authRouter);
 app.use("/admin", adminRouter);
 app.use("/addresses", addressesRouter);
