@@ -11,6 +11,29 @@ export type User = {
   role: UserRole
 }
 
+export type UserProfile = {
+  id: string
+  email: string
+  role: UserRole
+  avatar_url: string | null
+  created_at: string
+}
+
+export type Address = {
+  id: string
+  full_name: string
+  line1: string
+  line2: string | null
+  city: string
+  state: string
+  postal_code: string
+  country: string
+  is_default: boolean
+  created_at: string
+}
+
+export type AddressInput = Omit<Address, "id" | "created_at">
+
 export type Credentials = {
   email: string
   password: string
@@ -196,6 +219,8 @@ export type OrderSummary = {
   total_amount: string
   created_at: string
   item_count: number
+  preview_image: string | null
+  first_title: string | null
 }
 
 export type Order = {

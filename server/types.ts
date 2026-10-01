@@ -102,12 +102,28 @@ export type OrderRow = {
   created_at: Date;
 };
 
+export type AddressRow = {
+  id: string;
+  user_id: string;
+  full_name: string;
+  line1: string;
+  line2: string | null;
+  city: string;
+  state: string;
+  postal_code: string;
+  country: string;
+  is_default: boolean;
+  created_at: Date;
+};
+
 export type OrderSummaryRow = {
   id: string;
   status: OrderStatus;
   total_amount: string;
   created_at: Date;
-  item_count: number; // total units across all items
+  item_count: number;
+  preview_image: string | null;
+  first_title: string | null;
 };
 
 export type OrderItemDetailRow = {

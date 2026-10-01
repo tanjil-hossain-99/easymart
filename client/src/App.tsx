@@ -10,6 +10,7 @@ import { NotFoundPage } from "@/pages/NotFoundPage"
 import { OrderPage } from "@/pages/OrderPage"
 import { OrdersPage } from "@/pages/OrdersPage"
 import { ProductDetailPage } from "@/pages/ProductDetailPage"
+import { ProfilePage } from "@/pages/ProfilePage"
 import { ProductsPage } from "@/pages/ProductsPage"
 
 // Shared layout: header on every page, the matched route renders in <Outlet />
@@ -38,6 +39,7 @@ export default function App() {
           <Route path={ROUTES.checkout} element={<CheckoutPage />} />
           <Route path={ROUTES.orders} element={<OrdersPage />} />
           <Route path={ROUTES.orderDetail} element={<OrderPage />} />
+          <Route path={ROUTES.profile} element={<ProfilePage />} />
         </Route>
 
         {/* Catch-all. React Router ranks routes by specificity, so "*" only

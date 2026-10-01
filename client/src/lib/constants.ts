@@ -132,6 +132,7 @@ export const API_ENDPOINTS = {
   checkout: "/checkout",
   orders: "/orders",
   order: (id: string) => `/orders/${id}`,
+  addresses: "/addresses",
 } as const
 
 // ── Frontend routes (URLs in the browser) ──────────────────────────────────
@@ -152,6 +153,7 @@ export const ROUTES = {
   checkout: "/checkout/:orderId",
   orders: "/orders",
   orderDetail: "/orders/:orderId",
+  profile: "/profile",
   notFound: "*", // catch-all: any URL that matched nothing above
 } as const
 
@@ -172,6 +174,8 @@ export const QUERY_KEYS = {
   cart: "cart",
   orders: "orders",
   order: "order",
+  addresses: "addresses",
+  profile: "profile",
 } as const
 
 const MINUTE = 60 * 1000
@@ -227,7 +231,7 @@ export const SEARCH = {
   // "chicken" would cost 7 requests instead of 1.
   debounceMs: 300,
   // Autocomplete: shorter delay so suggestions feel instant while typing
-  suggestionDebounceMs: 150,
+  suggestionDebounceMs: 350,
   minSuggestionLength: 2, // must match the server's minSuggestionQueryLength
 } as const
 

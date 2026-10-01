@@ -34,7 +34,9 @@ export function Header() {
 
         {user ? (
           <div className={`${NAV_BLOCK} text-xs leading-tight`}>
-            <p>Hello, {firstName}</p>
+            <Link to={ROUTES.profile} className="block hover:underline">
+              Hello, {firstName}
+            </Link>
             <button onClick={logout} className="text-sm font-bold hover:underline">
               Sign out
             </button>
