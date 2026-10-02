@@ -32,6 +32,7 @@ export function HomePage() {
           title="Today's deals"
           filters={{ sort: ProductSort.Deals, limit: HOME.rowSize }}
           seeAllUrl={catalogUrl({ has_discount: true, sort: ProductSort.DiscountDesc })}
+          autoScroll
         />
 
         <section className="rounded-md bg-card p-4">
@@ -65,6 +66,8 @@ export function HomePage() {
           title="New arrivals"
           filters={{ sort: ProductSort.Newest, limit: HOME.rowSize }}
           seeAllUrl={catalogUrl()}
+          autoScroll
+          scrollDirection="right"
         />
       </div>
     </div>

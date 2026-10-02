@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react"
 import { Link } from "react-router"
 import { useProducts } from "@/hooks/useProducts"
 import { productUrl } from "@/lib/constants"
@@ -6,13 +7,63 @@ import type { ProductFilters } from "@/types/api"
 
 type Props = {
   title: string
-  filters: ProductFilters // which products this row shows (e.g. biggest discounts)
+  filters: ProductFilters
   seeAllUrl: string
+  autoScroll?: boolean
+  scrollDirection?: "left" | "right"
 }
 
-// Amazon-style horizontal row: title + "See all", then a scrollable strip of small cards
-export function ProductRow({ title, filters, seeAllUrl }: Props) {
+const SPEED = 40 // px per second
+
+export function ProductRow({ title, filters, seeAllUrl, autoScroll = false, scrollDirection = "left" }: Props) {
   const { data, isPending } = useProducts(filters)
+  const listRef = useRef<HTMLUListElement>(null)
+  const pausedRef = useRef(false)
+  const rafRef = useRef<number>(0)
+
+  useEffect(() => {
+    if (!autoScroll || !data) return
+    const el = listRef.current
+    if (!el) return
+
+    cancelAnimationFrame(rafRef.current)
+
+    // For right-to-left (scrollDirection="right"), start at the halfway point and count down
+    if (scrollDirection === "right") {
+      el.scrollLeft = el.scrollWidth / 2
+    }
+
+    let lastTime = 0
+
+    function step(time: number) {
+      const dt = lastTime ? (time - lastTime) / 1000 : 0
+      lastTime = time
+
+      if (!pausedRef.current && el) {
+        if (scrollDirection === "right") {
+          el.scrollLeft -= SPEED * dt
+          // When back at 0, jump to halfway to loop
+          if (el.scrollLeft <= 0) {
+            el.scrollLeft = el.scrollWidth / 2
+          }
+        } else {
+          el.scrollLeft += SPEED * dt
+          if (el.scrollLeft >= el.scrollWidth - el.clientWidth - 10) {
+            el.scrollLeft = 0
+          }
+        }
+      }
+
+      rafRef.current = requestAnimationFrame(step)
+    }
+
+    rafRef.current = requestAnimationFrame(step)
+    return () => cancelAnimationFrame(rafRef.current)
+  }, [autoScroll, scrollDirection, data])
+
+  const items = data?.data ?? []
+  // Duplicate the list so there's always content to scroll into
+  const displayItems = autoScroll ? [...items, ...items] : items
 
   return (
     <section className="rounded-md bg-card p-4">
@@ -26,12 +77,17 @@ export function ProductRow({ title, filters, seeAllUrl }: Props) {
       {isPending ? (
         <p className="h-56 text-muted-foreground">Loading…</p>
       ) : (
-        // snap-x: scrolling with a trackpad stops neatly on a card edge
-        <ul className="flex snap-x gap-4 overflow-x-auto pb-2">
-          {data?.data.map((product) => {
+        <ul
+          ref={listRef}
+          onMouseEnter={() => { pausedRef.current = true }}
+          onMouseLeave={() => { pausedRef.current = false }}
+          // No snap-x when auto-scrolling — scroll-snap-type fights requestAnimationFrame
+          className={`flex gap-4 overflow-x-auto pb-2 scrollbar-none ${autoScroll ? "" : "snap-x"}`}
+        >
+          {displayItems.map((product, idx) => {
             const onSale = Number(product.discount) > 0
             return (
-              <li key={product.id} className="w-44 shrink-0 snap-start">
+              <li key={`${product.id}-${idx}`} className={`w-44 shrink-0 ${autoScroll ? "" : "snap-start"}`}>
                 <Link to={productUrl(product.id)} className="group flex flex-col gap-1">
                   <div className="flex aspect-square items-center justify-center overflow-hidden rounded bg-muted">
                     {product.primary_image && (
