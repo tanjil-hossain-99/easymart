@@ -3,9 +3,10 @@ import { useNavigate } from "react-router"
 import { SaveButton } from "@/components/SaveButton"
 import { Button } from "@/components/ui/button"
 import { useAddToCart, useCart } from "@/hooks/useCart"
-import { useRequireLogin } from "@/hooks/useRequireLogin"
 import { BUY_BOX, CART, ROUTES, STORE_NAME } from "@/lib/constants"
 import { formatPrice } from "@/lib/format"
+import { useAuthStore } from "@/stores/useAuthStore"
+import { useGuestCartStore } from "@/stores/useGuestCartStore"
 
 type Props = {
   productId: string
@@ -17,19 +18,27 @@ type Props = {
 // The right-hand purchase card on the product page
 export function BuyBox({ productId, finalPrice, stock, merchantName }: Props) {
   const [quantity, setQuantity] = useState<number>(CART.defaultAddQuantity)
+  const isLoggedIn = useAuthStore((s) => !!s.token)
   const addToCart = useAddToCart()
-  const requireLogin = useRequireLogin()
   const navigate = useNavigate()
   const { data: cart } = useCart()
+  const guestCart = useGuestCartStore()
 
   const inStock = stock > 0
   const maxQuantity = Math.min(stock, BUY_BOX.maxQuantity)
   const quantityOptions = Array.from({ length: maxQuantity }, (_, i) => i + CART.minQuantity)
-  const alreadyInCart = cart?.items.some((i) => i.product_id === productId) ?? false
+
+  const inServerCart = cart?.items.some((i) => i.product_id === productId) ?? false
+  const inGuestCart = guestCart.items.some((i) => i.product_id === productId)
+  const alreadyInCart = isLoggedIn ? inServerCart : inGuestCart
 
   function add(onDone?: () => void) {
-    if (!requireLogin()) return
-    addToCart.mutate({ product_id: productId, quantity }, { onSuccess: onDone })
+    if (isLoggedIn) {
+      addToCart.mutate({ product_id: productId, quantity }, { onSuccess: onDone })
+    } else {
+      guestCart.addItem(productId, quantity)
+      onDone?.()
+    }
   }
 
   return (

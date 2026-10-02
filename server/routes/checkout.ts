@@ -34,7 +34,7 @@ router.post("/", async (req: Request, res: Response) => {
        FROM carts c
        JOIN cart_items ci ON ci.cart_id = c.id
        JOIN products p ON p.id = ci.product_id
-       LEFT JOIN inventory inv
+       JOIN inventory inv
          ON inv.product_id = ci.product_id
         AND inv.variant_id IS NOT DISTINCT FROM ci.variant_id
        WHERE c.user_id = $1

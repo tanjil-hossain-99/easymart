@@ -1,28 +1,32 @@
 import { Link } from "react-router"
 import { Button } from "@/components/ui/button"
 import { useAddToCart, useCart } from "@/hooks/useCart"
-import { useRequireLogin } from "@/hooks/useRequireLogin"
 import { CART, ROUTES } from "@/lib/constants"
+import { useGuestCartStore } from "@/stores/useGuestCartStore"
+import { useAuthStore } from "@/stores/useAuthStore"
 
 type Props = {
   productId: string
-  // Unknown on search results (Algolia records don't carry live stock) — the server
-  // re-checks stock at checkout anyway, so the button stays enabled
   stock?: number
-  compact?: boolean // smaller variant for result cards
+  compact?: boolean
 }
 
 export function AddToCartButton({ productId, stock, compact = false }: Props) {
+  const isLoggedIn = useAuthStore((s) => !!s.token)
   const addToCart = useAddToCart()
-  const requireLogin = useRequireLogin()
   const { data: cart } = useCart()
+  const guestCart = useGuestCartStore()
 
-  const inCart = cart?.items.some((item) => item.product_id === productId) ?? false
+  const inServerCart = cart?.items.some((item) => item.product_id === productId) ?? false
+  const inGuestCart = guestCart.items.some((item) => item.product_id === productId)
+  const inCart = isLoggedIn ? inServerCart : inGuestCart
 
   function handleClick() {
-    // Guests can browse, but the cart lives on the server under a user
-    if (!requireLogin()) return
-    addToCart.mutate({ product_id: productId, quantity: CART.defaultAddQuantity })
+    if (isLoggedIn) {
+      addToCart.mutate({ product_id: productId, quantity: CART.defaultAddQuantity })
+    } else {
+      guestCart.addItem(productId, CART.defaultAddQuantity)
+    }
   }
 
   const outOfStock = stock !== undefined && stock <= 0

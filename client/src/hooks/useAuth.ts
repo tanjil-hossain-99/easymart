@@ -3,6 +3,7 @@ import { apiFetch } from "@/lib/api"
 import { API_ENDPOINTS, HttpMethod } from "@/lib/constants"
 import { queryClient } from "@/lib/queryClient"
 import { useAuthStore } from "@/stores/useAuthStore"
+import { useGuestCartStore } from "@/stores/useGuestCartStore"
 import type { AuthResponse, Credentials } from "@/types/api"
 
 type AuthEndpoint = typeof API_ENDPOINTS.auth.login | typeof API_ENDPOINTS.auth.register
@@ -11,11 +12,28 @@ type AuthEndpoint = typeof API_ENDPOINTS.auth.login | typeof API_ENDPOINTS.auth.
 // and should only run when the user submits — never automatically.
 function useAuthMutation(endpoint: AuthEndpoint) {
   const setAuth = useAuthStore((s) => s.setAuth)
+  const guestCart = useGuestCartStore()
 
   return useMutation({
     mutationFn: (body: Credentials) =>
       apiFetch<AuthResponse>(endpoint, { method: HttpMethod.Post, body }),
-    onSuccess: ({ token, user }) => setAuth(token, user),
+    onSuccess: async ({ token, user }) => {
+      setAuth(token, user)
+
+      // Merge guest cart into the server cart — fire all requests in parallel
+      if (guestCart.items.length > 0) {
+        await Promise.allSettled(
+          guestCart.items.map((item) =>
+            apiFetch(API_ENDPOINTS.cartItems, {
+              method: HttpMethod.Post,
+              body: { product_id: item.product_id, quantity: item.quantity },
+            }),
+          ),
+        )
+        guestCart.clear()
+        queryClient.invalidateQueries({ queryKey: ["cart"] })
+      }
+    },
   })
 }
 

@@ -12,7 +12,7 @@ export function ProductResultCard({ product }: { product: Product }) {
 
   return (
     <article className="flex gap-4 rounded-md border bg-card p-3">
-      <Link to={url} className="flex size-48 shrink-0 items-center justify-center rounded bg-muted">
+      <Link to={url} target="_blank" rel="noreferrer" className="flex size-48 shrink-0 items-center justify-center rounded bg-muted">
         {product.primary_image && (
           <img
             src={product.primary_image}
@@ -24,7 +24,7 @@ export function ProductResultCard({ product }: { product: Product }) {
       </Link>
 
       <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <Link to={url} className="text-lg leading-snug font-medium hover:text-brand-text">
+        <Link to={url} target="_blank" rel="noreferrer" className="text-lg leading-snug font-medium hover:text-brand-text">
           {product.title}
         </Link>
         <p className="text-sm text-muted-foreground">by {product.merchant_name}</p>

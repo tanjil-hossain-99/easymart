@@ -50,9 +50,11 @@ export default function App() {
         <Route path={ROUTES.login} element={<AuthPage mode={AuthMode.Login} />} />
         <Route path={ROUTES.register} element={<AuthPage mode={AuthMode.Register} />} />
 
+        {/* Cart is accessible to guests — GuestCartPage handles the unauthed state */}
+        <Route path={ROUTES.cart} element={<CartPage />} />
+
         {/* Logged-in only */}
         <Route element={<RequireAuth />}>
-          <Route path={ROUTES.cart} element={<CartPage />} />
           <Route path={ROUTES.checkout} element={<CheckoutPage />} />
           <Route path={ROUTES.orders} element={<OrdersPage />} />
           <Route path={ROUTES.orderDetail} element={<OrderPage />} />

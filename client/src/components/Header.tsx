@@ -6,6 +6,7 @@ import { useLogout } from "@/hooks/useAuth"
 import { useCart } from "@/hooks/useCart"
 import { ROUTES } from "@/lib/constants"
 import { useAuthStore } from "@/stores/useAuthStore"
+import { useGuestCartStore } from "@/stores/useGuestCartStore"
 
 // Amazon-style hover: a thin outline appears around each header block
 const NAV_BLOCK = "rounded-sm border border-transparent px-2 py-1 hover:border-nav-foreground"
@@ -91,10 +92,13 @@ function DropdownLink({ to, children }: { to: string; children: React.ReactNode 
 
 export function Header() {
   const [searchActive, setSearchActive] = useState(false)
+  const isLoggedIn = useAuthStore((s) => !!s.token)
   const { data: cart } = useCart()
+  const guestItems = useGuestCartStore((s) => s.items)
 
-  // Total units, not distinct products: 3 of one item shows "3"
-  const cartCount = cart?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0
+  const cartCount = isLoggedIn
+    ? (cart?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0)
+    : guestItems.reduce((sum, item) => sum + item.quantity, 0)
 
   return (
     <header>
