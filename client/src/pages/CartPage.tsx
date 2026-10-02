@@ -18,17 +18,24 @@ export function CartPage() {
 
   if (cart.items.length === 0) {
     return (
-      <div className="p-6">
-        <h1 className="mb-2 text-2xl font-semibold">Your cart is empty</h1>
-        <Link to={ROUTES.home} className="text-primary underline">
-          Browse products
+      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 px-4 text-center">
+        {/* Cart illustration */}
+        <div className="flex size-24 items-center justify-center rounded-full bg-muted text-5xl">
+          🛒
+        </div>
+        <div>
+          <h1 className="text-2xl font-bold">Your cart is empty</h1>
+          <p className="mt-1 text-muted-foreground">Looks like you haven't added anything yet.</p>
+        </div>
+        <Link to={ROUTES.home}>
+          <Button size="lg">Start shopping</Button>
         </Link>
       </div>
     )
   }
 
-  // Any mutation's error (e.g. server rejected the change, out of stock) is shown once at the top
   const mutationError = updateItem.error ?? removeItem.error ?? checkout.error
+  const itemCount = cart.items.reduce((sum, i) => sum + i.quantity, 0)
 
   function handleCheckout() {
     checkout.mutate(undefined, {
@@ -37,34 +44,71 @@ export function CartPage() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl p-6">
-      <h1 className="mb-4 text-2xl font-semibold">Your cart</h1>
+    <div className="mx-auto max-w-4xl p-6">
+      <h1 className="mb-6 text-2xl font-bold">
+        Your cart <span className="text-base font-normal text-muted-foreground">({itemCount} {itemCount === 1 ? "item" : "items"})</span>
+      </h1>
 
-      {mutationError && <p className="mb-4 text-sm text-destructive">{mutationError.message}</p>}
+      {mutationError && (
+        <p className="mb-4 rounded-lg bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          {mutationError.message}
+        </p>
+      )}
 
-      <ul className="divide-y rounded-lg border">
-        {cart.items.map((item) => (
-          <CartRow
-            key={item.id}
-            item={item}
-            // Only disable the row being changed, not the whole cart
-            busy={
-              (updateItem.isPending && updateItem.variables?.id === item.id) ||
-              (removeItem.isPending && removeItem.variables === item.id)
-            }
-            onQuantityChange={(quantity) => updateItem.mutate({ id: item.id, quantity })}
-            onRemove={() => removeItem.mutate(item.id)}
-          />
-        ))}
-      </ul>
+      <div className="grid gap-6 lg:grid-cols-3">
+        {/* Items list */}
+        <div className="lg:col-span-2">
+          <ul className="divide-y rounded-xl border bg-card shadow-sm">
+            {cart.items.map((item) => (
+              <CartRow
+                key={item.id}
+                item={item}
+                busy={
+                  (updateItem.isPending && updateItem.variables?.id === item.id) ||
+                  (removeItem.isPending && removeItem.variables === item.id)
+                }
+                onQuantityChange={(quantity) => updateItem.mutate({ id: item.id, quantity })}
+                onRemove={() => removeItem.mutate(item.id)}
+              />
+            ))}
+          </ul>
+        </div>
 
-      <div className="mt-6 flex items-center justify-between">
-        <span className="text-lg">
-          Subtotal: <strong>{formatPrice(cart.subtotal)}</strong>
-        </span>
-        <Button size="lg" onClick={handleCheckout} disabled={checkout.isPending}>
-          {checkout.isPending ? "Creating order…" : "Checkout"}
-        </Button>
+        {/* Order summary */}
+        <div className="h-fit rounded-xl border bg-card p-5 shadow-sm">
+          <h2 className="mb-4 text-lg font-semibold">Order summary</h2>
+
+          <div className="space-y-2 text-sm">
+            <div className="flex justify-between text-muted-foreground">
+              <span>Subtotal ({itemCount} items)</span>
+              <span>{formatPrice(cart.subtotal)}</span>
+            </div>
+            <div className="flex justify-between text-muted-foreground">
+              <span>Shipping</span>
+              <span className="text-green-600 font-medium">Free</span>
+            </div>
+          </div>
+
+          <div className="my-4 border-t" />
+
+          <div className="flex justify-between text-base font-bold">
+            <span>Total</span>
+            <span>{formatPrice(cart.subtotal)}</span>
+          </div>
+
+          <Button
+            size="lg"
+            className="mt-5 w-full"
+            onClick={handleCheckout}
+            disabled={checkout.isPending}
+          >
+            {checkout.isPending ? "Creating order…" : "Proceed to checkout"}
+          </Button>
+
+          <Link to={ROUTES.home} className="mt-3 block text-center text-sm text-primary hover:underline">
+            Continue shopping
+          </Link>
+        </div>
       </div>
     </div>
   )
@@ -78,55 +122,72 @@ type CartRowProps = {
 }
 
 function CartRow({ item, busy, onQuantityChange, onRemove }: CartRowProps) {
-  // stock is null if the product has no inventory row — treat as 0 available
   const stock = item.stock ?? 0
   const overStock = item.quantity > stock
 
   return (
-    <li className="flex items-center gap-4 p-4">
-      {item.primary_image && (
-        <img src={item.primary_image} alt={item.title} className="size-16 rounded object-cover" />
-      )}
+    <li className={`flex gap-4 p-4 transition-opacity ${busy ? "opacity-50" : ""}`}>
+      {/* Thumbnail */}
+      <div className="size-20 shrink-0 overflow-hidden rounded-lg bg-muted">
+        {item.primary_image && (
+          <img src={item.primary_image} alt={item.title} className="h-full w-full object-cover" />
+        )}
+      </div>
 
-      <div className="min-w-0 flex-1">
-        <Link to={productUrl(item.product_id)} className="font-medium hover:underline">
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <Link to={productUrl(item.product_id)} className="font-medium leading-snug hover:underline line-clamp-2">
           {item.title}
         </Link>
         {item.variant_type && (
-          <p className="text-sm text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             {item.variant_type}: {item.variant_value}
           </p>
         )}
-        <p className="text-sm text-muted-foreground">{formatPrice(item.unit_price)} each</p>
-        {/* Stock can drop after the item was added; checkout will reject it, so warn early */}
-        {overStock && <p className="text-sm text-destructive">Only {stock} left in stock</p>}
+        {overStock && (
+          <p className="text-xs text-destructive font-medium">Only {stock} left in stock</p>
+        )}
+
+        <div className="mt-auto flex items-center justify-between gap-3">
+          {/* Quantity stepper */}
+          <div className="flex items-center gap-1 rounded-lg border px-1">
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Decrease"
+              disabled={busy || item.quantity <= CART.minQuantity}
+              onClick={() => onQuantityChange(item.quantity - 1)}
+            >
+              −
+            </Button>
+            <span className="w-7 text-center text-sm tabular-nums">{item.quantity}</span>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Increase"
+              disabled={busy || item.quantity >= stock}
+              onClick={() => onQuantityChange(item.quantity + 1)}
+            >
+              +
+            </Button>
+          </div>
+
+          <button
+            onClick={onRemove}
+            disabled={busy}
+            className="text-xs text-muted-foreground hover:text-destructive transition-colors"
+          >
+            Remove
+          </button>
+        </div>
       </div>
 
-      <div className="flex items-center gap-2">
-        <Button
-          variant="outline"
-          size="icon-sm"
-          aria-label="Decrease quantity"
-          disabled={busy || item.quantity <= CART.minQuantity}
-          onClick={() => onQuantityChange(item.quantity - 1)}
-        >
-          −
-        </Button>
-        <span className="w-8 text-center tabular-nums">{item.quantity}</span>
-        <Button
-          variant="outline"
-          size="icon-sm"
-          aria-label="Increase quantity"
-          disabled={busy || item.quantity >= stock}
-          onClick={() => onQuantityChange(item.quantity + 1)}
-        >
-          +
-        </Button>
+      {/* Price */}
+      <div className="text-right">
+        <p className="font-semibold">{formatPrice(item.unit_price)}</p>
+        {item.quantity > 1 && (
+          <p className="text-xs text-muted-foreground">{formatPrice(item.unit_price)} each</p>
+        )}
       </div>
-
-      <Button variant="ghost" size="sm" disabled={busy} onClick={onRemove}>
-        Remove
-      </Button>
     </li>
   )
 }

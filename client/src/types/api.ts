@@ -89,6 +89,7 @@ export type Category = {
   name: string
   slug: string
   parent_id: string | null
+  preview_image: string | null
 }
 
 export type Pagination = {
@@ -195,6 +196,12 @@ export type UpdateCartItemInput = {
   quantity: number
 }
 
+// ── Saved products ─────────────────────────────────────────────────────────
+
+export type SavedProductsResponse = {
+  data: Product[]
+}
+
 // ── Orders & checkout ──────────────────────────────────────────────────────
 
 export type CheckoutResponse = {
@@ -221,6 +228,14 @@ export type OrderSummary = {
   item_count: number
   preview_image: string | null
   first_title: string | null
+}
+
+export type OrdersPage = {
+  orders: OrderSummary[]
+  total: number
+  page: number
+  limit: number
+  hasMore: boolean
 }
 
 export type Order = {

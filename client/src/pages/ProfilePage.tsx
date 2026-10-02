@@ -191,6 +191,9 @@ export function ProfilePage() {
           <Link to={ROUTES.orders} className="text-primary hover:underline">
             Your orders
           </Link>
+          <Link to={ROUTES.saved} className="text-primary hover:underline">
+            Saved items
+          </Link>
         </div>
       </section>
 

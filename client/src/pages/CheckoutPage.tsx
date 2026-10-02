@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react"
 import { Elements, PaymentElement, useElements, useStripe } from "@stripe/react-stripe-js"
 import { Navigate, useNavigate, useParams } from "react-router"
 import { Button } from "@/components/ui/button"
+import { Modal } from "@/components/ui/modal"
 import { useAddresses, useSaveOrderAddress } from "@/hooks/useAddresses"
 import { useOrder, usePlaceCodOrder } from "@/hooks/useOrders"
 import { isNotFoundError } from "@/lib/api"
@@ -192,15 +193,18 @@ function AddressStep({
 function PaymentMethodStep({
   orderId,
   clientSecret,
+  totalAmount,
   onChangeAddress,
 }: {
   orderId: string
   clientSecret: string
+  totalAmount: string
   onChangeAddress: () => void
 }) {
   const navigate = useNavigate()
   const placeCod = usePlaceCodOrder(orderId)
   const [method, setMethod] = useState<"cod" | "stripe">("cod")
+  const [stripeOpen, setStripeOpen] = useState(false)
 
   async function handlePlaceCod() {
     await placeCod.mutateAsync(undefined, {
@@ -260,35 +264,47 @@ function PaymentMethodStep({
               {(placeCod.error as Error)?.message ?? "Failed to place order. Please try again."}
             </p>
           )}
-          <Button
-            size="lg"
-            className="w-full"
-            onClick={handlePlaceCod}
-            disabled={placeCod.isPending}
-          >
+          <Button size="lg" className="w-full" onClick={handlePlaceCod} disabled={placeCod.isPending}>
             {placeCod.isPending ? "Placing order…" : "Place order (pay on delivery)"}
           </Button>
         </>
       )}
 
-      {/* Stripe payment form */}
+      {/* Open Stripe modal */}
       {method === "stripe" && (
-        <Elements stripe={stripePromise} options={{ clientSecret }}>
-          <StripePaymentForm orderId={orderId} />
-        </Elements>
+        <Button size="lg" className="w-full" onClick={() => setStripeOpen(true)}>
+          Continue to payment
+        </Button>
       )}
 
-      <button
-        onClick={onChangeAddress}
-        className="text-sm text-primary hover:underline"
-      >
+      <button onClick={onChangeAddress} className="text-sm text-primary hover:underline">
         ← Change address
       </button>
+
+      {/* Stripe payment modal */}
+      <Elements stripe={stripePromise} options={{ clientSecret }}>
+        <StripeModal
+          open={stripeOpen}
+          onClose={() => setStripeOpen(false)}
+          orderId={orderId}
+          totalAmount={totalAmount}
+        />
+      </Elements>
     </div>
   )
 }
 
-function StripePaymentForm({ orderId }: { orderId: string }) {
+function StripeModal({
+  open,
+  onClose,
+  orderId,
+  totalAmount,
+}: {
+  open: boolean
+  onClose: () => void
+  orderId: string
+  totalAmount: string
+}) {
   const stripe = useStripe()
   const elements = useElements()
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
@@ -311,13 +327,18 @@ function StripePaymentForm({ orderId }: { orderId: string }) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-      <PaymentElement />
-      {errorMessage && <p className="text-sm text-destructive">{errorMessage}</p>}
-      <Button type="submit" size="lg" disabled={!stripe || submitting}>
-        {submitting ? "Processing…" : "Pay now"}
-      </Button>
-    </form>
+    <Modal open={open} onClose={onClose} title="Complete payment">
+      <p className="mb-4 text-sm text-muted-foreground">
+        Amount due: <strong className="text-foreground">{formatPrice(totalAmount)}</strong>
+      </p>
+      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+        <PaymentElement />
+        {errorMessage && <p className="text-sm text-destructive">{errorMessage}</p>}
+        <Button type="submit" size="lg" disabled={!stripe || submitting}>
+          {submitting ? "Processing…" : "Pay now"}
+        </Button>
+      </form>
+    </Modal>
   )
 }
 
@@ -362,6 +383,7 @@ export function CheckoutPage() {
         <PaymentMethodStep
           orderId={order.id}
           clientSecret={order.clientSecret}
+          totalAmount={order.total_amount}
           onChangeAddress={() => setStep("address")}
         />
       )}

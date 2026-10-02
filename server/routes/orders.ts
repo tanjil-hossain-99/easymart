@@ -10,36 +10,55 @@ const router = Router();
 
 router.use(requireAuth);
 
+const ORDERS_PAGE_SIZE = 10;
+
 // ─── GET /orders ──────────────────────────────────────────────────────────────
-// The logged-in user's orders, newest first. Summary only — the detail page
-// loads items via GET /orders/:id.
+// The logged-in user's orders, newest first, paginated.
+// ?page=1&limit=10 (defaults applied server-side).
 router.get("/", async (req: Request, res: Response) => {
-  // One query with GROUP BY instead of "fetch orders, then count items per order"
-  // (that would be N+1 queries: 1 for the list + 1 per order).
-  const result = await pool.query<OrderSummaryRow>(
-    `SELECT o.id, o.status, o.total_amount, o.created_at,
-            COALESCE(SUM(oi.quantity), 0)::INTEGER AS item_count,
-            (SELECT pi.url
-             FROM order_items oi2
-             JOIN products p2 ON p2.id = oi2.product_id
-             LEFT JOIN product_images pi ON pi.product_id = p2.id AND pi.is_primary = true
-             WHERE oi2.order_id = o.id
-             ORDER BY oi2.created_at
-             LIMIT 1) AS preview_image,
-            (SELECT p2.title
-             FROM order_items oi2
-             JOIN products p2 ON p2.id = oi2.product_id
-             WHERE oi2.order_id = o.id
-             ORDER BY oi2.created_at
-             LIMIT 1) AS first_title
-     FROM orders o
-     LEFT JOIN order_items oi ON oi.order_id = o.id
-     WHERE o.user_id = $1
-     GROUP BY o.id
-     ORDER BY o.created_at DESC`,
-    [req.user!.id],
-  );
-  res.json(result.rows);
+  const page  = Math.max(1, parseInt(String(req.query.page  ?? 1), 10) || 1);
+  const limit = Math.min(50, Math.max(1, parseInt(String(req.query.limit ?? ORDERS_PAGE_SIZE), 10) || ORDERS_PAGE_SIZE));
+  const offset = (page - 1) * limit;
+
+  const [dataResult, countResult] = await Promise.all([
+    pool.query<OrderSummaryRow>(
+      `SELECT o.id, o.status, o.total_amount, o.created_at,
+              COALESCE(SUM(oi.quantity), 0)::INTEGER AS item_count,
+              (SELECT pi.url
+               FROM order_items oi2
+               JOIN products p2 ON p2.id = oi2.product_id
+               LEFT JOIN product_images pi ON pi.product_id = p2.id AND pi.is_primary = true
+               WHERE oi2.order_id = o.id
+               ORDER BY oi2.created_at
+               LIMIT 1) AS preview_image,
+              (SELECT p2.title
+               FROM order_items oi2
+               JOIN products p2 ON p2.id = oi2.product_id
+               WHERE oi2.order_id = o.id
+               ORDER BY oi2.created_at
+               LIMIT 1) AS first_title
+       FROM orders o
+       LEFT JOIN order_items oi ON oi.order_id = o.id
+       WHERE o.user_id = $1
+       GROUP BY o.id
+       ORDER BY o.created_at DESC
+       LIMIT $2 OFFSET $3`,
+      [req.user!.id, limit, offset],
+    ),
+    pool.query<{ total: string }>(
+      `SELECT COUNT(*)::TEXT AS total FROM orders WHERE user_id = $1`,
+      [req.user!.id],
+    ),
+  ]);
+
+  const total = parseInt(countResult.rows[0].total, 10);
+  res.json({
+    orders: dataResult.rows,
+    total,
+    page,
+    limit,
+    hasMore: offset + dataResult.rows.length < total,
+  });
 });
 
 // ─── GET /orders/:id ──────────────────────────────────────────────────────────

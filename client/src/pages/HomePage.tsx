@@ -30,20 +30,31 @@ export function HomePage() {
       <div className="mx-auto -mt-16 flex w-full max-w-6xl flex-col gap-6 px-4">
         <ProductRow
           title="Today's deals"
-          filters={{ sort: ProductSort.DiscountDesc, limit: HOME.rowSize }}
+          filters={{ sort: ProductSort.Deals, limit: HOME.rowSize }}
           seeAllUrl={catalogUrl({ has_discount: true, sort: ProductSort.DiscountDesc })}
         />
 
         <section className="rounded-md bg-card p-4">
-          <h2 className="mb-3 text-xl font-bold">Shop by department</h2>
-          <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+          <h2 className="mb-3 text-xl font-bold">Shop by category</h2>
+          <ul className="flex gap-3 overflow-x-auto pb-2 scrollbar-none">
             {departments.map((d) => (
-              <li key={d.id}>
+              <li key={d.id} className="shrink-0">
                 <Link
                   to={catalogUrl({ category_id: d.id })}
-                  className="flex h-20 items-center justify-center rounded-md bg-muted font-medium hover:bg-brand hover:text-brand-foreground"
+                  className="group relative flex h-32 w-40 items-end overflow-hidden rounded-xl bg-muted"
                 >
-                  {d.name}
+                  {d.preview_image && (
+                    <img
+                      src={d.preview_image}
+                      alt={d.name}
+                      className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                    />
+                  )}
+                  {/* gradient overlay so text is always readable */}
+                  <div className="absolute inset-0 bg-linear-to-t from-black/70 via-black/20 to-transparent" />
+                  <span className="relative w-full px-3 pb-3 text-sm font-semibold text-white drop-shadow">
+                    {d.name}
+                  </span>
                 </Link>
               </li>
             ))}

@@ -46,7 +46,8 @@ export const ProductSort = {
   Newest: "newest",
   PriceAsc: "price_asc",
   PriceDesc: "price_desc",
-  DiscountDesc: "discount_desc", // "Today's deals": biggest discount first
+  DiscountDesc: "discount_desc",
+  Deals: "deals", // random picks from high-discount products — rotates on each load
 } as const;
 export type ProductSort = (typeof ProductSort)[keyof typeof ProductSort];
 

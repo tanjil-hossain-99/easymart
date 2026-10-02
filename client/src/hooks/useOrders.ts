@@ -1,8 +1,8 @@
-import { useMutation, useQuery } from "@tanstack/react-query"
+import { useInfiniteQuery, useMutation, useQuery } from "@tanstack/react-query"
 import { apiFetch } from "@/lib/api"
 import { API_ENDPOINTS, HttpMethod, ORDER_POLL_INTERVAL, OrderStatus, QUERY_KEYS } from "@/lib/constants"
 import { queryClient } from "@/lib/queryClient"
-import type { CheckoutResponse, Order, OrderSummary } from "@/types/api"
+import type { CheckoutResponse, Order, OrdersPage } from "@/types/api"
 
 // Cart → pending order + Stripe PaymentIntent
 export function useCheckout() {
@@ -20,14 +20,19 @@ export function usePlaceCodOrder(orderId: string) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.orders] })
       queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.order, orderId] })
+      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.cart] })
     },
   })
 }
 
 export function useOrders() {
-  return useQuery<OrderSummary[]>({
+  return useInfiniteQuery<OrdersPage>({
     queryKey: [QUERY_KEYS.orders],
-    queryFn: () => apiFetch(API_ENDPOINTS.orders),
+    queryFn: ({ pageParam = 1 }) =>
+      apiFetch(`${API_ENDPOINTS.orders}?page=${pageParam}&limit=10`),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) =>
+      lastPage.hasMore ? lastPage.page + 1 : undefined,
   })
 }
 

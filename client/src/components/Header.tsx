@@ -10,47 +10,101 @@ import { useAuthStore } from "@/stores/useAuthStore"
 // Amazon-style hover: a thin outline appears around each header block
 const NAV_BLOCK = "rounded-sm border border-transparent px-2 py-1 hover:border-nav-foreground"
 
-export function Header() {
+function AccountDropdown() {
   const user = useAuthStore((s) => s.user)
   const logout = useLogout()
+  const firstName = user?.email.split("@")[0]
+
+  return (
+    // group: hovering anywhere in this container (trigger OR panel) keeps the panel open
+    <div className="group relative">
+      {/* Trigger */}
+      <div className={`${NAV_BLOCK} cursor-default text-xs leading-tight`}>
+        <p>{user ? `Hello, ${firstName}` : "Hello, sign in"}</p>
+        <p className="text-sm font-bold">Account ▾</p>
+      </div>
+
+      {/* Dropdown panel — hidden until the group is hovered */}
+      {/* pointer-events-none on the gap between trigger and panel would break hover;
+          a negative top margin bridges it so the mouse never leaves the group */}
+      <div className="invisible absolute right-0 top-full z-50 mt-0 min-w-48 opacity-0 transition-all duration-100 group-hover:visible group-hover:opacity-100">
+        {/* small arrow pointer */}
+        <div className="ml-auto mr-4 h-0 w-0 border-x-8 border-b-8 border-x-transparent border-b-white dark:border-b-zinc-800" />
+
+        <div className="rounded-md border bg-white py-2 shadow-lg dark:bg-zinc-800 dark:border-zinc-700">
+          {user ? (
+            <>
+              <DropdownSection>
+                <DropdownLink to={ROUTES.profile}>Your account</DropdownLink>
+                <DropdownLink to={ROUTES.orders}>Your orders</DropdownLink>
+                <DropdownLink to={ROUTES.saved}>Saved items</DropdownLink>
+              </DropdownSection>
+              <div className="my-1 border-t dark:border-zinc-700" />
+              <DropdownSection>
+                <button
+                  onClick={logout}
+                  className="w-full px-4 py-1.5 text-left text-sm hover:bg-muted dark:hover:bg-zinc-700"
+                >
+                  Sign out
+                </button>
+              </DropdownSection>
+            </>
+          ) : (
+            <>
+              <div className="px-4 py-2">
+                <Link
+                  to={ROUTES.login}
+                  className="block w-full rounded-full bg-brand px-3 py-1.5 text-center text-sm font-semibold text-brand-foreground hover:bg-brand-hover"
+                >
+                  Sign in
+                </Link>
+              </div>
+              <div className="my-1 border-t dark:border-zinc-700" />
+              <DropdownSection>
+                <p className="px-4 py-1 text-xs text-muted-foreground">New customer?</p>
+                <DropdownLink to={ROUTES.register}>Create account</DropdownLink>
+              </DropdownSection>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function DropdownSection({ children }: { children: React.ReactNode }) {
+  return <div>{children}</div>
+}
+
+function DropdownLink({ to, children }: { to: string; children: React.ReactNode }) {
+  return (
+    <Link
+      to={to}
+      className="block px-4 py-1.5 text-sm text-foreground hover:bg-muted dark:hover:bg-zinc-700"
+    >
+      {children}
+    </Link>
+  )
+}
+
+export function Header() {
   const [searchActive, setSearchActive] = useState(false)
   const { data: cart } = useCart()
 
   // Total units, not distinct products: 3 of one item shows "3"
   const cartCount = cart?.items.reduce((sum, item) => sum + item.quantity, 0) ?? 0
-  // "Hello, jane" from jane@example.com
-  const firstName = user?.email.split("@")[0]
 
   return (
     <header>
       {/* relative z-50: the top bar (search box + dropdown) stays above the overlay */}
       <div className="relative z-50 flex items-center gap-3 bg-nav px-4 py-2 text-nav-foreground">
         <Link to={ROUTES.home} className={`${NAV_BLOCK} text-xl font-bold tracking-tight`}>
-          easy<span className="text-brand">mart</span>
+          Tc<span className="text-brand">Mart</span>
         </Link>
 
         <SearchBar onActiveChange={setSearchActive} />
 
-        {user ? (
-          <div className={`${NAV_BLOCK} text-xs leading-tight`}>
-            <Link to={ROUTES.profile} className="block hover:underline">
-              Hello, {firstName}
-            </Link>
-            <button onClick={logout} className="text-sm font-bold hover:underline">
-              Sign out
-            </button>
-          </div>
-        ) : (
-          <Link to={ROUTES.login} className={`${NAV_BLOCK} text-xs leading-tight`}>
-            <p>Hello, sign in</p>
-            <p className="text-sm font-bold">Account</p>
-          </Link>
-        )}
-
-        <Link to={ROUTES.orders} className={`${NAV_BLOCK} hidden text-xs leading-tight sm:block`}>
-          <p>Returns</p>
-          <p className="text-sm font-bold">& Orders</p>
-        </Link>
+        <AccountDropdown />
 
         <Link
           to={ROUTES.cart}

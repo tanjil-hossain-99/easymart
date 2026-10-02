@@ -12,6 +12,8 @@ import authRouter from "./routes/auth.js";
 import cartRouter from "./routes/cart.js";
 import categoriesRouter from "./routes/categories.js";
 import checkoutRouter from "./routes/checkout.js";
+import invoicesRouter from "./routes/invoices.js";
+import savedProductsRouter from "./routes/savedProducts.js";
 import ordersRouter from "./routes/orders.js";
 import productsRouter from "./routes/products.js";
 import searchRouter from "./routes/search.js";
@@ -60,6 +62,8 @@ app.use("/addresses", addressesRouter);
 app.use("/cart", cartRouter);
 app.use("/checkout", checkoutRouter);
 app.use("/orders", ordersRouter);
+app.use("/invoices", invoicesRouter);
+app.use("/saved", savedProductsRouter);
 
 // No route matched → JSON 404 in the same { error } shape as every other API error
 // (instead of Express's default HTML "Cannot GET /xyz" page)

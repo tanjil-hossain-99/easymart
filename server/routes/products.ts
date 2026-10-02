@@ -62,11 +62,18 @@ router.get("/", async (req: Request, res: Response) => {
 
   // Sort
   // Record<ProductSort, …> makes TypeScript error if a sort option is added without SQL for it
+  // "deals" sort: only high-discount products, random order so it rotates on each load
+  const isDeals = sort === ProductSort.Deals
+  if (isDeals) {
+    conditions.push(`p.discount >= 40`)
+  }
+
   const sortMap: Record<ProductSort, string> = {
-    [ProductSort.PriceAsc]:  `${FINAL_PRICE_SQL} ASC`,
-    [ProductSort.PriceDesc]: `${FINAL_PRICE_SQL} DESC`,
-    [ProductSort.Newest]:    "p.created_at DESC",
+    [ProductSort.PriceAsc]:     `${FINAL_PRICE_SQL} ASC`,
+    [ProductSort.PriceDesc]:    `${FINAL_PRICE_SQL} DESC`,
+    [ProductSort.Newest]:       "p.created_at DESC",
     [ProductSort.DiscountDesc]: "p.discount DESC",
+    [ProductSort.Deals]:        "RANDOM()",
   }
   const orderBy = sortMap[sort as ProductSort] ?? sortMap[ProductSort.Newest]
 

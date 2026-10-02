@@ -1,5 +1,6 @@
 import { Link } from "react-router"
 import { AddToCartButton } from "@/components/AddToCartButton"
+import { SaveButton } from "@/components/SaveButton"
 import { productUrl } from "@/lib/constants"
 import { formatPercent, formatPrice } from "@/lib/format"
 import type { Product } from "@/types/api"
@@ -42,8 +43,9 @@ export function ProductResultCard({ product }: { product: Product }) {
           </p>
         )}
 
-        <div className="mt-auto">
+        <div className="mt-auto flex items-center gap-3">
           <AddToCartButton productId={product.id} compact />
+          <SaveButton productId={product.id} compact />
         </div>
       </div>
     </article>

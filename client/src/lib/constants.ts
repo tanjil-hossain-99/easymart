@@ -14,6 +14,7 @@ export const ProductSort = {
   PriceAsc: "price_asc",
   PriceDesc: "price_desc",
   DiscountDesc: "discount_desc",
+  Deals: "deals",
 } as const
 export type ProductSort = (typeof ProductSort)[keyof typeof ProductSort]
 
@@ -62,6 +63,7 @@ export const PRODUCT_SORT_LABELS: Record<ProductSort, string> = {
   [ProductSort.PriceAsc]: "Price ↑",
   [ProductSort.PriceDesc]: "Price ↓",
   [ProductSort.DiscountDesc]: "Biggest discount",
+  [ProductSort.Deals]: "Deals",
 }
 
 export const AUTH = {
@@ -74,7 +76,7 @@ export const CART = {
   maxBadgeCount: 99, // header cart shows "99+" above this
 } as const
 
-export const STORE_NAME = "EasyMart"
+export const STORE_NAME = "TcMart"
 
 // Product page buy box
 export const BUY_BOX = {
@@ -137,6 +139,8 @@ export const API_ENDPOINTS = {
   orderAddress: (id: string) => `/orders/${id}/address`,
   orderCod: (id: string) => `/orders/${id}/cod`,
   addresses: "/addresses",
+  saved: "/saved",
+  savedProduct: (productId: string) => `/saved/${productId}`,
 } as const
 
 // ── Frontend routes (URLs in the browser) ──────────────────────────────────
@@ -158,6 +162,7 @@ export const ROUTES = {
   orders: "/orders",
   orderDetail: "/orders/:orderId",
   profile: "/profile",
+  saved: "/saved",
   notFound: "*", // catch-all: any URL that matched nothing above
 } as const
 
@@ -180,6 +185,7 @@ export const QUERY_KEYS = {
   order: "order",
   addresses: "addresses",
   profile: "profile",
+  saved: "saved",
 } as const
 
 const MINUTE = 60 * 1000
@@ -251,5 +257,5 @@ export const STRIPE_REDIRECT = {
 // ── Storage ────────────────────────────────────────────────────────────────
 
 export const STORAGE_KEYS = {
-  auth: "easymart-auth",
+  auth: "tcmart-auth",
 } as const

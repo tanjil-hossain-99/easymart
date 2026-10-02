@@ -156,7 +156,7 @@ function SearchForm({ initialText, initialDepartment, onActiveChange }: SearchFo
             setActiveIndex(NO_ACTIVE_ROW)
           }}
           onKeyDown={handleKeyDown}
-          placeholder="Search EasyMart"
+          placeholder="Search TcMart"
           autoComplete="off" // hide the browser's own history dropdown
           // Combobox ARIA: screen readers announce the list and the highlighted row
           role="combobox"

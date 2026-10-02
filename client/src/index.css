@@ -65,7 +65,7 @@
     --card-foreground: oklch(0.145 0 0);
     --popover: oklch(1 0 0);
     --popover-foreground: oklch(0.145 0 0);
-    --primary: oklch(0.205 0 0);
+    --primary: oklch(0.55 0.19 264);       /* TechCare blue */
     --primary-foreground: oklch(0.985 0 0);
     --secondary: oklch(0.97 0 0);
     --secondary-foreground: oklch(0.205 0 0);
@@ -91,15 +91,15 @@
     --sidebar-accent-foreground: oklch(0.205 0 0);
     --sidebar-border: oklch(0.922 0 0);
     --sidebar-ring: oklch(0.708 0 0);
-    --nav: oklch(0.2 0.02 255);            /* dark navy top bar */
-    --nav-secondary: oklch(0.29 0.03 255); /* lighter navy category bar */
+    --nav: oklch(0.14 0.065 264);           /* TechCare deep navy #0D1B3E */
+    --nav-secondary: oklch(0.20 0.06 264); /* slightly lighter navy */
     --nav-foreground: oklch(0.985 0 0);
-    --brand: oklch(0.84 0.13 75);          /* orange: search button, primary actions */
-    --brand-hover: oklch(0.78 0.14 70);
-    --brand-foreground: oklch(0.2 0.02 255);
-    --brand-text: oklch(0.55 0.15 55);     /* darker orange: readable as text on white */
+    --brand: oklch(0.55 0.19 264);         /* TechCare bright blue #3D7EF5 */
+    --brand-hover: oklch(0.50 0.20 264);
+    --brand-foreground: oklch(0.985 0 0);  /* white text on blue */
+    --brand-text: oklch(0.45 0.18 264);    /* darker blue: readable as text on white */
     --overlay: oklch(0 0 0 / 50%);         /* dims the page while the search box is focused */
-    --brand-strong: oklch(0.72 0.18 58);   /* saturated orange: cart count on the dark nav */
+    --brand-strong: oklch(0.60 0.21 264);  /* bright blue: cart count on the dark nav */
 }
 
 .dark {
@@ -134,15 +134,15 @@
     --sidebar-accent-foreground: oklch(0.985 0 0);
     --sidebar-border: oklch(1 0 0 / 10%);
     --sidebar-ring: oklch(0.556 0 0);
-    --nav: oklch(0.17 0.02 255);
-    --nav-secondary: oklch(0.24 0.03 255);
+    --nav: oklch(0.11 0.055 264);
+    --nav-secondary: oklch(0.17 0.05 264);
     --nav-foreground: oklch(0.985 0 0);
-    --brand: oklch(0.8 0.13 75);
-    --brand-hover: oklch(0.74 0.14 70);
-    --brand-foreground: oklch(0.17 0.02 255);
-    --brand-text: oklch(0.8 0.13 75);
+    --brand: oklch(0.58 0.20 264);
+    --brand-hover: oklch(0.53 0.21 264);
+    --brand-foreground: oklch(0.985 0 0);
+    --brand-text: oklch(0.65 0.18 264);
     --overlay: oklch(0 0 0 / 60%);
-    --brand-strong: oklch(0.74 0.18 58);
+    --brand-strong: oklch(0.63 0.22 264);
 }
 
 @layer base {
