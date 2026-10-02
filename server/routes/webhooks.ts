@@ -71,13 +71,13 @@ async function handlePaymentSucceeded(paymentIntent: Stripe.PaymentIntent) {
       paymentIntent.id,
     ]);
 
-    // Decrement stock for every item in the order, in one statement.
-    // Naive on purpose: if stock ran out since checkout, the CHECK (quantity >= 0)
-    // constraint throws, the transaction rolls back, and Stripe keeps retrying.
-    // Fixing that properly (stock reservation) is Phase 5/6.
+    // Convert the reservation into a real deduction: subtract from both quantity
+    // and reserved together. This is safe to retry (idempotent via the status check
+    // above) and the CHECK (quantity >= 0) is a final safety net.
     await client.query(
       `UPDATE inventory inv
-       SET quantity = inv.quantity - oi.quantity
+       SET quantity = inv.quantity - oi.quantity,
+           reserved = GREATEST(inv.reserved - oi.quantity, 0)
        FROM order_items oi
        WHERE oi.order_id = $1
          AND inv.product_id = oi.product_id

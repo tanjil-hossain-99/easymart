@@ -19,21 +19,26 @@ router.use(requireAuth);
 //
 // NOT done here (on purpose):
 //   - decrementing stock and clearing the cart → only after Stripe confirms payment (webhook)
-//   - protection against concurrent checkouts / double clicks → Phase 5 (race conditions)
 router.post("/", async (req: Request, res: Response) => {
   const userId = req.user!.id;
 
   // ── 1. Create the order + its items atomically ──────────────────────────────
   const order = await withTransaction(async (client) => {
     const cart = await client.query<CheckoutItemRow>(
-      `SELECT ci.product_id, p.title, ci.quantity, inv.quantity AS stock, p.is_active
+      // FOR UPDATE OF inv: locks these inventory rows for the duration of the transaction.
+      // Any concurrent checkout touching the same products blocks here until we commit,
+      // then re-reads the updated reserved count — so two users can't both pass the
+      // availability check for the last item.
+      `SELECT ci.product_id, ci.variant_id, p.title, ci.quantity,
+              inv.quantity - inv.reserved AS stock, p.is_active
        FROM carts c
        JOIN cart_items ci ON ci.cart_id = c.id
        JOIN products p ON p.id = ci.product_id
        LEFT JOIN inventory inv
          ON inv.product_id = ci.product_id
         AND inv.variant_id IS NOT DISTINCT FROM ci.variant_id
-       WHERE c.user_id = $1`,
+       WHERE c.user_id = $1
+       FOR UPDATE OF inv`,
       [userId],
     );
 
@@ -59,6 +64,23 @@ router.post("/", async (req: Request, res: Response) => {
       [userId, OrderStatus.Pending],
     );
     const orderId = created.rows[0].id;
+
+    // Reserve stock for every item — other checkouts will see reduced availability
+    // until this order is paid (reservation converted to deduction) or expires (10 min).
+    await client.query(
+      `UPDATE inventory inv
+       SET reserved       = inv.reserved + oi.quantity,
+           reserved_until = NOW() + INTERVAL '10 minutes'
+       FROM (
+         SELECT ci.product_id, ci.variant_id, ci.quantity
+         FROM cart_items ci
+         JOIN carts c ON c.id = ci.cart_id
+         WHERE c.user_id = $1
+       ) oi
+       WHERE inv.product_id = oi.product_id
+         AND inv.variant_id IS NOT DISTINCT FROM oi.variant_id`,
+      [userId],
+    );
 
     // Copy cart → order_items, freezing today's price in price_at_purchase.
     // INSERT ... SELECT does it in one statement, entirely inside Postgres.
@@ -103,11 +125,22 @@ router.post("/", async (req: Request, res: Response) => {
       { idempotencyKey: `order-${order.id}` },
     );
   } catch (err) {
-    // No way to pay for this order — don't leave it hanging as "pending"
-    await pool.query(`UPDATE orders SET status = $1 WHERE id = $2`, [
-      OrderStatus.Cancelled,
-      order.id,
-    ]);
+    // No way to pay for this order — cancel it and release the stock reservation
+    await withTransaction(async (client) => {
+      await client.query(`UPDATE orders SET status = $1 WHERE id = $2`, [
+        OrderStatus.Cancelled,
+        order.id,
+      ]);
+      await client.query(
+        `UPDATE inventory inv
+         SET reserved = GREATEST(inv.reserved - oi.quantity, 0)
+         FROM order_items oi
+         WHERE oi.order_id = $1
+           AND inv.product_id = oi.product_id
+           AND inv.variant_id IS NOT DISTINCT FROM oi.variant_id`,
+        [order.id],
+      );
+    });
     throw err;
   }
 

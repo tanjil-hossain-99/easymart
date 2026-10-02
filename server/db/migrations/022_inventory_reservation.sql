@@ -1,0 +1,3 @@
+ALTER TABLE inventory
+  ADD COLUMN IF NOT EXISTS reserved        INTEGER     NOT NULL DEFAULT 0 CHECK (reserved >= 0),
+  ADD COLUMN IF NOT EXISTS reserved_until  TIMESTAMPTZ;

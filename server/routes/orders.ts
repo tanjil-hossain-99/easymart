@@ -164,7 +164,7 @@ router.post("/:id/cod", async (req: Request<{ id: string }>, res: Response) => {
     return;
   }
 
-  // Mark order confirmed + clear the user's cart atomically
+  // Mark order confirmed + clear cart + convert reservations to real deductions atomically
   await withTransaction(async (client) => {
     await client.query(
       `UPDATE orders SET status = $1, payment_method = 'cod' WHERE id = $2`,
@@ -173,6 +173,16 @@ router.post("/:id/cod", async (req: Request<{ id: string }>, res: Response) => {
     await client.query(
       `DELETE FROM cart_items WHERE cart_id = (SELECT id FROM carts WHERE user_id = $1)`,
       [req.user!.id],
+    );
+    await client.query(
+      `UPDATE inventory inv
+       SET quantity = inv.quantity - oi.quantity,
+           reserved = GREATEST(inv.reserved - oi.quantity, 0)
+       FROM order_items oi
+       WHERE oi.order_id = $1
+         AND inv.product_id = oi.product_id
+         AND inv.variant_id IS NOT DISTINCT FROM oi.variant_id`,
+      [order.id],
     );
   });
 

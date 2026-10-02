@@ -52,7 +52,7 @@ router.get("/", async (req: Request, res: Response) => {
        pi.url AS primary_image,
        v.type  AS variant_type,
        v.value AS variant_value,
-       inv.quantity AS stock,
+       inv.quantity - inv.reserved AS stock,
        ${UNIT_PRICE_SQL} AS unit_price
      FROM cart_items ci
      JOIN products p ON p.id = ci.product_id

@@ -1,6 +1,6 @@
 import { Link } from "react-router"
 import { Button } from "@/components/ui/button"
-import { useAddToCart } from "@/hooks/useCart"
+import { useAddToCart, useCart } from "@/hooks/useCart"
 import { useRequireLogin } from "@/hooks/useRequireLogin"
 import { CART, ROUTES } from "@/lib/constants"
 
@@ -15,6 +15,9 @@ type Props = {
 export function AddToCartButton({ productId, stock, compact = false }: Props) {
   const addToCart = useAddToCart()
   const requireLogin = useRequireLogin()
+  const { data: cart } = useCart()
+
+  const inCart = cart?.items.some((item) => item.product_id === productId) ?? false
 
   function handleClick() {
     // Guests can browse, but the cart lives on the server under a user
@@ -29,14 +32,13 @@ export function AddToCartButton({ productId, stock, compact = false }: Props) {
       <Button
         size={compact ? "sm" : "lg"}
         onClick={handleClick}
-        disabled={outOfStock || addToCart.isPending}
-        // Amazon-style yellow pill button
+        disabled={outOfStock || addToCart.isPending || inCart}
         className="rounded-full bg-brand px-4 text-brand-foreground hover:bg-brand-hover"
       >
         {outOfStock ? "Out of stock" : addToCart.isPending ? "Adding…" : "Add to cart"}
       </Button>
 
-      {addToCart.isSuccess && (
+      {(inCart || addToCart.isSuccess) && (
         <span className="text-sm">
           Added ✓{" "}
           <Link to={ROUTES.cart} className="text-brand-text underline">

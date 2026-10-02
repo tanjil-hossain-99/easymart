@@ -27,11 +27,13 @@ function AccountDropdown() {
       {/* Dropdown panel — hidden until the group is hovered */}
       {/* pointer-events-none on the gap between trigger and panel would break hover;
           a negative top margin bridges it so the mouse never leaves the group */}
-      <div className="invisible absolute right-0 top-full z-50 mt-0 min-w-48 opacity-0 transition-all duration-100 group-hover:visible group-hover:opacity-100">
+      <div className="invisible absolute right-0 top-full z-50 min-w-48 opacity-0 transition-all duration-100 group-hover:visible group-hover:opacity-100">
+        {/* invisible bridge fills the gap between trigger and panel so hover doesn't break */}
+        <div className="h-2 w-full" />
         {/* small arrow pointer */}
         <div className="ml-auto mr-4 h-0 w-0 border-x-8 border-b-8 border-x-transparent border-b-white dark:border-b-zinc-800" />
 
-        <div className="rounded-md border bg-white py-2 shadow-lg dark:bg-zinc-800 dark:border-zinc-700">
+        <div className="rounded-md border bg-white py-2 pb-3 shadow-lg dark:bg-zinc-800 dark:border-zinc-700">
           {user ? (
             <>
               <DropdownSection>
@@ -43,7 +45,7 @@ function AccountDropdown() {
               <DropdownSection>
                 <button
                   onClick={logout}
-                  className="w-full px-4 py-1.5 text-left text-sm hover:bg-muted dark:hover:bg-zinc-700"
+                  className="w-full px-4 py-1.5 text-left text-sm text-foreground hover:bg-muted dark:hover:bg-zinc-700"
                 >
                   Sign out
                 </button>

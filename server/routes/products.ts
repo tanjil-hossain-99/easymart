@@ -62,10 +62,10 @@ router.get("/", async (req: Request, res: Response) => {
 
   // Sort
   // Record<ProductSort, …> makes TypeScript error if a sort option is added without SQL for it
-  // "deals" sort: only high-discount products, random order so it rotates on each load
+  // "deals" sort: only actively featured products, expiring soonest first (creates urgency)
   const isDeals = sort === ProductSort.Deals
   if (isDeals) {
-    conditions.push(`p.discount >= 40`)
+    conditions.push(`p.featured_until > NOW()`)
   }
 
   const sortMap: Record<ProductSort, string> = {
@@ -73,7 +73,7 @@ router.get("/", async (req: Request, res: Response) => {
     [ProductSort.PriceDesc]:    `${FINAL_PRICE_SQL} DESC`,
     [ProductSort.Newest]:       "p.created_at DESC",
     [ProductSort.DiscountDesc]: "p.discount DESC",
-    [ProductSort.Deals]:        "RANDOM()",
+    [ProductSort.Deals]:        "p.featured_until ASC",
   }
   const orderBy = sortMap[sort as ProductSort] ?? sortMap[ProductSort.Newest]
 
@@ -169,7 +169,7 @@ router.get("/:id", async (req: Request, res: Response) => {
         [id]
       ),
       pool.query<InventoryRow>(
-        `SELECT variant_id, quantity FROM inventory WHERE product_id = $1`,
+        `SELECT variant_id, quantity - reserved AS quantity FROM inventory WHERE product_id = $1`,
         [id]
       ),
     ])
