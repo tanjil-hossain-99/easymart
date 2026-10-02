@@ -18,24 +18,19 @@ export function ResultsBar({ query, relevanceOrder, pagination, sort, onSortChan
 
       <label className="flex items-center gap-2 rounded-md border bg-muted px-2 py-1 text-sm shadow-sm">
         Sort by:
-        {/* Search results come back in relevance order — price/date sorting needs Algolia replicas */}
-        {relevanceOrder ? (
-          <select disabled className="bg-transparent" title="Search results are sorted by relevance">
-            <option>{RELEVANCE_SORT_LABEL}</option>
-          </select>
-        ) : (
-          <select
-            value={sort}
-            onChange={(e) => onSortChange(e.target.value as ProductSort)}
-            className="bg-transparent"
-          >
-            {Object.values(ProductSort).map((option) => (
-              <option key={option} value={option}>
-                {PRODUCT_SORT_LABELS[option]}
-              </option>
-            ))}
-          </select>
-        )}
+        <select
+          value={sort ?? ""}
+          onChange={(e) => onSortChange(e.target.value as ProductSort)}
+          className="bg-transparent"
+        >
+          {/* For text searches show a Relevance option (primary Algolia index, no replica) */}
+          {relevanceOrder && <option value="">{RELEVANCE_SORT_LABEL}</option>}
+          {Object.values(ProductSort).map((option) => (
+            <option key={option} value={option}>
+              {PRODUCT_SORT_LABELS[option]}
+            </option>
+          ))}
+        </select>
       </label>
     </div>
   )
