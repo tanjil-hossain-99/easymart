@@ -23,7 +23,8 @@ export function ProductsPage() {
   // `enabled` makes sure only the active one actually sends requests.
   const viaSearchEngine = !!q || !!rest.category_id || hasFacetSelections
   const productList = useProducts({ ...rest, sort }, { enabled: !viaSearchEngine })
-  const searchResults = useSearchProducts({ ...rest, q: q ?? "", facets }, { enabled: viaSearchEngine })
+  // Pass sort to Algolia too — it picks the right replica index server-side
+  const searchResults = useSearchProducts({ ...rest, q: q ?? "", sort, facets }, { enabled: viaSearchEngine })
   const { data, isPending, isError } = viaSearchEngine ? searchResults : productList
 
   function goToPage(page: number) {
@@ -35,7 +36,7 @@ export function ProductsPage() {
     <div>
       <ResultsBar
         query={q}
-        relevanceOrder={viaSearchEngine}
+        relevanceOrder={!!q}
         pagination={data?.pagination}
         sort={sort}
         onSortChange={(sort) => update({ sort })}

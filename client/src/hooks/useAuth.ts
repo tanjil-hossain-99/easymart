@@ -26,7 +26,7 @@ function useAuthMutation(endpoint: AuthEndpoint) {
           guestCart.items.map((item) =>
             apiFetch(API_ENDPOINTS.cartItems, {
               method: HttpMethod.Post,
-              body: { product_id: item.product_id, quantity: item.quantity },
+              body: { product_id: item.product_id, variant_id: item.variant_id ?? null, quantity: item.quantity },
             }),
           ),
         )

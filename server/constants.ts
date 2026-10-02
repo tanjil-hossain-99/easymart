@@ -94,6 +94,13 @@ export const STRIPE = {
 
 export const ALGOLIA = {
   productsIndex: "products",
+  // Replica indices — one per sort order (Algolia requires a separate index per sort)
+  replicas: {
+    price_asc:     "products_price_asc",
+    price_desc:    "products_price_desc",
+    newest:        "products_newest",
+    discount_desc: "products_discount_desc",
+  },
   // Free plan record limit — we index the newest N active products. Raise on a paid plan.
   maxRecords: 10_000,
   batchSize: 1_000, // records per upload request

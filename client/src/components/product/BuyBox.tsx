@@ -10,13 +10,14 @@ import { useGuestCartStore } from "@/stores/useGuestCartStore"
 
 type Props = {
   productId: string
+  variantId?: string | null
   finalPrice: string
   stock: number
+  stockMessage?: "select-size"  // prompt to pick a size before showing stock/buttons
   merchantName: string
 }
 
-// The right-hand purchase card on the product page
-export function BuyBox({ productId, finalPrice, stock, merchantName }: Props) {
+export function BuyBox({ productId, variantId = null, finalPrice, stock, stockMessage, merchantName }: Props) {
   const [quantity, setQuantity] = useState<number>(CART.defaultAddQuantity)
   const isLoggedIn = useAuthStore((s) => !!s.token)
   const addToCart = useAddToCart()
@@ -28,15 +29,20 @@ export function BuyBox({ productId, finalPrice, stock, merchantName }: Props) {
   const maxQuantity = Math.min(stock, BUY_BOX.maxQuantity)
   const quantityOptions = Array.from({ length: maxQuantity }, (_, i) => i + CART.minQuantity)
 
-  const inServerCart = cart?.items.some((i) => i.product_id === productId) ?? false
-  const inGuestCart = guestCart.items.some((i) => i.product_id === productId)
+  // A variant product is "in cart" only if the same variant is already there
+  const inServerCart = cart?.items.some(
+    (i) => i.product_id === productId && i.variant_id === variantId,
+  ) ?? false
+  const inGuestCart = guestCart.items.some(
+    (i) => i.product_id === productId && (i.variant_id ?? null) === variantId,
+  )
   const alreadyInCart = isLoggedIn ? inServerCart : inGuestCart
 
   function add(onDone?: () => void) {
     if (isLoggedIn) {
-      addToCart.mutate({ product_id: productId, quantity }, { onSuccess: onDone })
+      addToCart.mutate({ product_id: productId, variant_id: variantId, quantity }, { onSuccess: onDone })
     } else {
-      guestCart.addItem(productId, quantity)
+      guestCart.addItem(productId, quantity, variantId ?? undefined)
       onDone?.()
     }
   }
@@ -45,9 +51,13 @@ export function BuyBox({ productId, finalPrice, stock, merchantName }: Props) {
     <aside className="flex flex-col gap-3 rounded-lg border p-4" aria-label="Buy">
       <p className="text-2xl font-medium">{formatPrice(finalPrice)}</p>
 
-      <StockMessage stock={stock} />
+      {stockMessage === "select-size" ? (
+        <p className="text-sm text-muted-foreground">Please select a size.</p>
+      ) : (
+        <StockMessage stock={stock} />
+      )}
 
-      {inStock && (
+      {stockMessage !== "select-size" && inStock && (
         <>
           {!alreadyInCart && (
             <label className="flex items-center gap-2 text-sm">
@@ -81,7 +91,6 @@ export function BuyBox({ productId, finalPrice, stock, merchantName }: Props) {
             </Button>
           )}
 
-          {/* Buy Now: add then navigate to cart */}
           <Button
             onClick={() => alreadyInCart ? navigate(ROUTES.cart) : add(() => navigate(ROUTES.cart))}
             disabled={addToCart.isPending}

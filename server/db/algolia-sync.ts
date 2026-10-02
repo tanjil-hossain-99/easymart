@@ -73,26 +73,46 @@ async function sync() {
   const keys = await pool.query<{ key: string }>(`SELECT DISTINCT key FROM category_attributes ORDER BY key`);
   const attributeKeys = keys.rows.map((row) => row.key);
 
-  // Index settings: what's searchable, what's filterable, how to break ties
+  const sharedSettings = {
+    searchableAttributes: ["title", "brand", "category_name", "merchant_name", "unordered(description)"],
+    attributesForFaceting: [
+      "filterOnly(category_ids)",
+      "category_id",
+      "brand",
+      ...attributeKeys.map((key) => `${ALGOLIA.attributeFacetPrefix}${key}`),
+    ],
+  };
+
+  // Index settings: what's searchable, what's filterable, how to break ties.
+  // replicas declares the sort-order copies — Algolia creates them automatically.
   await adminClient.setSettings({
     indexName: ALGOLIA.productsIndex,
     indexSettings: {
-      // Order = importance: a match in the title beats a match in the description.
-      // unordered(): position of the word inside the description doesn't matter
-      searchableAttributes: ["title", "brand", "category_name", "merchant_name", "unordered(description)"],
-      attributesForFaceting: [
-        // filterOnly: used in filters, but we never need counts per id
-        "filterOnly(category_ids)",
-        // Faceted = Algolia returns counts per value with every search. These drive the
-        // dynamic sidebar: category_id picks which filters to show, the rest are the filters.
-        "category_id",
-        "brand",
-        ...attributeKeys.map((key) => `${ALGOLIA.attributeFacetPrefix}${key}`),
-      ],
-      // When relevance ties, show bigger discounts, then newer products first
+      ...sharedSettings,
       customRanking: ["desc(discount)", "desc(created_at_ts)"],
+      replicas: Object.values(ALGOLIA.replicas),
     },
   });
+
+  // Each replica needs its own ranking — that's what makes it sort differently
+  await Promise.all([
+    adminClient.setSettings({
+      indexName: ALGOLIA.replicas.price_asc,
+      indexSettings: { ...sharedSettings, ranking: ["asc(final_price)"] },
+    }),
+    adminClient.setSettings({
+      indexName: ALGOLIA.replicas.price_desc,
+      indexSettings: { ...sharedSettings, ranking: ["desc(final_price)"] },
+    }),
+    adminClient.setSettings({
+      indexName: ALGOLIA.replicas.newest,
+      indexSettings: { ...sharedSettings, ranking: ["desc(created_at_ts)"] },
+    }),
+    adminClient.setSettings({
+      indexName: ALGOLIA.replicas.discount_desc,
+      indexSettings: { ...sharedSettings, ranking: ["desc(discount)"] },
+    }),
+  ]);
 
   console.log("Clearing the old index...");
   const cleared = await adminClient.clearObjects({ indexName: ALGOLIA.productsIndex });

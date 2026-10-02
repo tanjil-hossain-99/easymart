@@ -1,3 +1,4 @@
+import { useState } from "react"
 import { useParams } from "react-router"
 import { BuyBox } from "@/components/product/BuyBox"
 import { CategoryBreadcrumb } from "@/components/product/CategoryBreadcrumb"
@@ -6,7 +7,7 @@ import { useProduct } from "@/hooks/useProducts"
 import { isNotFoundError } from "@/lib/api"
 import { formatPercent, formatPrice } from "@/lib/format"
 import { NotFoundPage } from "@/pages/NotFoundPage"
-import type { ProductDetail } from "@/types/api"
+import type { ProductDetail, ProductVariant } from "@/types/api"
 
 // Amazon-style product page:
 //   breadcrumb
@@ -14,16 +15,25 @@ import type { ProductDetail } from "@/types/api"
 export function ProductDetailPage() {
   const { id } = useParams()
   const { data: product, isPending, isError, error } = useProduct(id!)
+  const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null)
 
   if (isPending) return <p className="p-6 text-muted-foreground">Loading…</p>
   if (isError) {
-    // Deleted/inactive product or a mangled link → friendly not-found, not a raw error
     if (isNotFoundError(error)) return <NotFoundPage thing="product" />
     return <p className="p-6 text-destructive">Couldn't load this product. Please try again.</p>
   }
 
-  // Products without variants keep their stock on the row with variant_id = null
-  const stock = product.inventory.find((i) => i.variant_id === null)?.quantity ?? 0
+  const hasVariants = product.variants.length > 0
+
+  // Stock: for variant products, use the selected variant's stock; fall back to base row
+  const stock = hasVariants
+    ? (product.inventory.find((i) => i.variant_id === selectedVariantId)?.quantity ?? 0)
+    : (product.inventory.find((i) => i.variant_id === null)?.quantity ?? 0)
+
+  // Price: add the selected variant's price modifier on top of the product's final_price
+  const selectedVariant = product.variants.find((v) => v.id === selectedVariantId) ?? null
+  const variantModifier = selectedVariant ? Number(selectedVariant.price_modifier) : 0
+  const displayPrice = (Number(product.final_price) + variantModifier).toFixed(2)
 
   return (
     <div className="mx-auto max-w-7xl p-4">
@@ -32,13 +42,19 @@ export function ProductDetailPage() {
       <div className="mt-4 grid gap-8 md:grid-cols-[minmax(0,5fr)_minmax(0,4fr)] lg:grid-cols-[minmax(0,5fr)_minmax(0,5fr)_16rem]">
         <ImageGallery images={product.images} alt={product.title} />
 
-        <ProductInfo product={product} />
+        <ProductInfo
+          product={product}
+          selectedVariantId={selectedVariantId}
+          onVariantSelect={setSelectedVariantId}
+        />
 
         <div className="md:col-span-2 lg:col-span-1">
           <BuyBox
             productId={product.id}
-            finalPrice={product.final_price}
-            stock={stock}
+            variantId={selectedVariantId}
+            finalPrice={displayPrice}
+            stock={hasVariants && !selectedVariantId ? 0 : stock}
+            stockMessage={hasVariants && !selectedVariantId ? "select-size" : undefined}
             merchantName={product.merchant_name}
           />
         </div>
@@ -47,7 +63,13 @@ export function ProductDetailPage() {
   )
 }
 
-function ProductInfo({ product }: { product: ProductDetail }) {
+type ProductInfoProps = {
+  product: ProductDetail
+  selectedVariantId: string | null
+  onVariantSelect: (id: string) => void
+}
+
+function ProductInfo({ product, selectedVariantId, onVariantSelect }: ProductInfoProps) {
   const onSale = Number(product.discount) > 0
 
   return (
@@ -77,39 +99,85 @@ function ProductInfo({ product }: { product: ProductDetail }) {
         )}
       </div>
 
-      {product.variants.length > 0 && <Variants product={product} />}
+      {product.variants.length > 0 && (
+        <VariantSelector
+          variants={product.variants}
+          inventory={product.inventory}
+          selectedId={selectedVariantId}
+          onSelect={onVariantSelect}
+        />
+      )}
 
       <hr />
 
       <section>
         <h2 className="mb-1 font-bold">About this item</h2>
-        {/* whitespace-pre-line: the description is one feature per line */}
         <p className="leading-relaxed whitespace-pre-line">{product.description}</p>
       </section>
     </div>
   )
 }
 
-// Read-only for now: the seed data has no variants, and choosing one would also
-// need variant-aware stock + add-to-cart
-function Variants({ product }: { product: ProductDetail }) {
+type VariantSelectorProps = {
+  variants: ProductVariant[]
+  inventory: { variant_id: string | null; quantity: number }[]
+  selectedId: string | null
+  onSelect: (id: string) => void
+}
+
+function VariantSelector({ variants, inventory, selectedId, onSelect }: VariantSelectorProps) {
+  // Group by type so we can show "Size: S M L XL" as one row
+  const groups = variants.reduce<Record<string, ProductVariant[]>>((acc, v) => {
+    acc[v.type] = acc[v.type] ?? []
+    acc[v.type].push(v)
+    return acc
+  }, {})
+
   return (
-    <div className="flex flex-wrap gap-2">
-      {product.variants.map((v) => {
-        const stock = product.inventory.find((i) => i.variant_id === v.id)?.quantity ?? 0
-        const modifier = Number(v.price_modifier)
-        return (
-          <span key={v.id} className={`rounded-md border px-3 py-1 text-sm ${stock === 0 ? "opacity-40" : ""}`}>
-            {v.type}: {v.value}
-            {modifier !== 0 && (
-              <span className="ml-1 text-muted-foreground">
-                ({modifier > 0 ? "+" : ""}
-                {formatPrice(v.price_modifier)})
+    <div className="flex flex-col gap-3">
+      {Object.entries(groups).map(([type, options]) => (
+        <div key={type}>
+          <p className="mb-1.5 text-sm font-medium">
+            {type}
+            {selectedId && options.find((v) => v.id === selectedId) && (
+              <span className="ml-1.5 font-normal text-muted-foreground">
+                : {options.find((v) => v.id === selectedId)!.value}
               </span>
             )}
-          </span>
-        )
-      })}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {options.map((v) => {
+              const stock = inventory.find((i) => i.variant_id === v.id)?.quantity ?? 0
+              const outOfStock = stock === 0
+              const isSelected = v.id === selectedId
+              const modifier = Number(v.price_modifier)
+
+              return (
+                <button
+                  key={v.id}
+                  onClick={() => !outOfStock && onSelect(v.id)}
+                  disabled={outOfStock}
+                  title={outOfStock ? "Out of stock" : undefined}
+                  className={[
+                    "rounded-md border px-3 py-1.5 text-sm transition-colors",
+                    isSelected
+                      ? "border-brand bg-brand/10 font-medium text-brand-text ring-1 ring-brand"
+                      : "hover:border-brand hover:text-brand-text",
+                    outOfStock ? "cursor-not-allowed opacity-40 line-through" : "cursor-pointer",
+                  ].join(" ")}
+                >
+                  {v.value}
+                  {modifier !== 0 && (
+                    <span className="ml-1 text-xs text-muted-foreground">
+                      ({modifier > 0 ? "+" : ""}{formatPrice(v.price_modifier)})
+                    </span>
+                  )}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      ))}
     </div>
   )
 }

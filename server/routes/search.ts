@@ -22,6 +22,7 @@ type SearchQuery = Partial<{
   min_price: string;
   max_price: string;
   has_discount: string;
+  sort: string;
   page: string;
   limit: string;
 }>;
@@ -34,7 +35,13 @@ type SearchQuery = Partial<{
 // We can change search providers, add auth/rate limits, or log queries without
 // touching the frontend — at the cost of one extra network hop.
 router.get("/", async (req: Request<{}, {}, {}, SearchQuery>, res: Response) => {
-  const { q = "", category_id, min_price, max_price, has_discount } = req.query;
+  const { q = "", category_id, min_price, max_price, has_discount, sort } = req.query;
+
+  // Pick the replica index for the requested sort order.
+  // The primary index uses Algolia's relevance ranking — replicas are pre-sorted copies.
+  const indexName = (sort && sort in ALGOLIA.replicas)
+    ? ALGOLIA.replicas[sort as keyof typeof ALGOLIA.replicas]
+    : ALGOLIA.productsIndex;
 
   // Algolia filters are a string like: category_id:"abc" AND price >= 10.
   // Never paste raw user input into it — validate first (same idea as SQL injection).
@@ -80,7 +87,7 @@ router.get("/", async (req: Request<{}, {}, {}, SearchQuery>, res: Response) => 
   const { results } = await searchClient.search<ProductSearchRecord>({
     requests: [
       {
-        indexName: ALGOLIA.productsIndex,
+        indexName,
         query: q,
         filters: filtersExcept(),
         page: page - 1, // Algolia pages start at 0, our API at 1
@@ -88,7 +95,7 @@ router.get("/", async (req: Request<{}, {}, {}, SearchQuery>, res: Response) => 
         facets: ["*"],
       },
       ...selections.map((selection) => ({
-        indexName: ALGOLIA.productsIndex,
+        indexName,
         query: q,
         filters: filtersExcept(selection),
         hitsPerPage: 0,

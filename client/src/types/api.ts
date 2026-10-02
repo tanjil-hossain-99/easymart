@@ -156,8 +156,8 @@ export type CatalogFilters = ProductFilters & {
   facets?: FacetSelections
 }
 
-// Search uses the same filters, minus sort (Algolia orders by relevance), plus the text query
-export type SearchFilters = Omit<ProductFilters, "sort"> & {
+// Search supports sort via Algolia replica indices (one index per sort order)
+export type SearchFilters = ProductFilters & {
   q: string
   facets?: FacetSelections
 }

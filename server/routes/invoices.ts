@@ -125,14 +125,18 @@ router.get("/:orderId", async (req: Request<{ orderId: string }>, res: Response)
   // ── Items rows ────────────────────────────────────────────────────────────
   let y = tableTop + 22;
   itemsResult.rows.forEach((item, i) => {
+    // Measure how tall the title will be when wrapped at 295px so the row fits it
+    const titleHeight = doc.fontSize(9).font("Helvetica").heightOfString(item.title, { width: 295 });
+    const rowHeight = Math.max(22, titleHeight + 14);
+
     const rowBg = i % 2 === 0 ? "#f9fafb" : "#ffffff";
-    doc.rect(50, y, 495, 22).fill(rowBg);
+    doc.rect(50, y, 495, rowHeight).fill(rowBg);
     doc.fillColor("#000").fontSize(9).font("Helvetica")
-      .text(item.title.length > 55 ? item.title.slice(0, 52) + "…" : item.title, 60, y + 7, { width: 295 })
+      .text(item.title, 60, y + 7, { width: 295 })
       .text(String(item.quantity), 360, y + 7, { width: 50, align: "center" })
       .text(`$${Number(item.price_at_purchase).toFixed(2)}`, 410, y + 7, { width: 70, align: "right" })
       .text(`$${Number(item.line_total).toFixed(2)}`, 480, y + 7, { width: 60, align: "right" });
-    y += 22;
+    y += rowHeight;
   });
 
   // ── Total ─────────────────────────────────────────────────────────────────
